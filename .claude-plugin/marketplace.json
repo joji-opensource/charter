@@ -1,0 +1,14 @@
+{
+  "name": "dev-charter",
+  "owner": {
+    "name": "Joji John"
+  },
+  "description": "Dev Charter: features in plain English, traced to the code that builds them and the tests that prove them.",
+  "plugins": [
+    {
+      "name": "dev-charter",
+      "source": "./plugin",
+      "description": "Dev Charter's commands for Claude Code: set up a product, write features, follow the plan-review-probe-build loop, and Strict mode."
+    }
+  ]
+}

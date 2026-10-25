@@ -1,0 +1,11 @@
+{
+  "name": "dev-charter",
+  "version": "0.1.0",
+  "description": "Dev Charter's commands for Claude Code. Needs the dev-charter command: uv tool install dev-charter",
+  "author": {
+    "name": "Joji John"
+  },
+  "homepage": "https://github.com/joji-opensource/charter",
+  "repository": "https://github.com/joji-opensource/charter",
+  "license": "Apache-2.0"
+}

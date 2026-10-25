@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev-charter >/dev/null 2>&1 && dev-charter status --brief 2>/dev/null; exit 0"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev-charter >/dev/null 2>&1 && dev-charter guard; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
