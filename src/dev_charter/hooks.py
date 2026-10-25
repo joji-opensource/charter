@@ -58,7 +58,7 @@ def _where(config: Config, repo: Repo) -> str:
         relative = repo.path.relative_to(config.root).as_posix()
     except ValueError:
         return str(repo.path)
-    return "This repository" if relative in ("", ".") else relative
+    return "This folder" if relative in ("", ".") else relative
 
 
 def install(config: Config) -> list[str]:

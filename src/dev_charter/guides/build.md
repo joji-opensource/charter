@@ -13,8 +13,8 @@ these, because each one looks reasonable and together they build a different pro
 
 **The blocker test** is the only exception. A change outside the card is allowed only when all three hold: a check
 on the card cannot pass without it; there is no way round it inside the card; and the change is the smallest that
-unblocks. Note it under **Blockers** on the card (date · file · why) and make it. If it is large, or touches code
-other work depends on, stop and ask instead.
+unblocks. Note it under **Blockers** on the card (date · file · why), add the file to **Allowed paths** in Strict
+mode, and make it. If it is large, or touches code other work depends on, stop and ask instead.
 
 ## Build so it can be undone
 

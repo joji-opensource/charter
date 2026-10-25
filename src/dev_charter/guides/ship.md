@@ -1,8 +1,9 @@
 # Ship: hand off, and prepare the commit
 
-1. **Update `charter/handoff.md`** with only the current state: what was done (with the evidence: the test, the
-   output, the screen), what is in progress and exactly where it stopped, what was parked, and the exact next step.
-   The next session, or the next person, starts from it.
+1. **Update the card's Handoff section** with only the current state: what was done (with the evidence: the test,
+   the output, the screen), what is in progress and exactly where it stopped, what was parked, and the next step.
+   The next session, or the next person, starts from it. Each card keeps its own handoff, so people working on other
+   branches never overwrite each other's.
 2. **Close the card** by setting its `state: done`, if its Done when passed.
 3. **Run `dev-charter check`** and fix every problem it reports.
 4. **Commit only when the person asks.** Otherwise stage the files the card touched, and nothing that wandered in,

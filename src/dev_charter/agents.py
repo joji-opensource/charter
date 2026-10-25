@@ -7,6 +7,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from packaging.version import Version
+
 from . import __version__
 from .errors import CharterError
 from .store import template
@@ -16,8 +18,14 @@ END = "<!-- dev-charter:end -->"
 BLOCK_RE = re.compile(r"<!-- dev-charter:start v(?P<version>\S+) -->.*?<!-- dev-charter:end -->", re.DOTALL)
 
 
+def minor(version: str = __version__) -> str:
+    """The marker carries the minor version only, so teammates on different patch releases leave it alone."""
+    major, minor_number = Version(version).release[:2]
+    return f"{major}.{minor_number}"
+
+
 def render_block(version: str = __version__) -> str:
-    return f"<!-- dev-charter:start v{version} -->\n{template('agents_block.md').rstrip()}\n{END}"
+    return f"<!-- dev-charter:start v{minor(version)} -->\n{template('agents_block.md').rstrip()}\n{END}"
 
 
 def block_version(root: Path) -> str | None:

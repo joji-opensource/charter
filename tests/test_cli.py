@@ -17,10 +17,13 @@ def snapshot(root: Path) -> dict[str, bytes]:
 
 def test_init_sets_everything_up_and_a_second_run_changes_nothing(product):
     root = product.root
-    for rel in ("charter.toml", "AGENTS.md", ".gitignore", "charter/ideas.md", "charter/handoff.md",
+    for rel in ("charter.toml", "AGENTS.md", ".gitignore", ".gitattributes", "charter/ideas.md",
                 "charter/features/.gitkeep", "charter/cards/.gitkeep"):
         assert (root / rel).is_file(), rel
+    assert not (root / "charter/handoff.md").exists()
     assert "/LEDGER.xlsx" in (root / ".gitignore").read_text()
+    assert "/.dev-charter/" in (root / ".gitignore").read_text()
+    assert "charter/ideas.md merge=union" in (root / ".gitattributes").read_text()
     before = snapshot(root)
     result = product.run("init", "--yes")
     assert "already there" in result.output
@@ -87,7 +90,8 @@ def test_report_builds_a_readable_spreadsheet_and_page(product):
     assert "Rebuilt LEDGER.xlsx and status.html." in product.run("report").output
 
     book = load_workbook(product.root / "LEDGER.xlsx")
-    assert book.sheetnames == ["Summary", "Features", "Promises", "Code map", "Decisions", "Ideas"]
+    assert book.sheetnames == ["Summary", "Features", "Promises", "Code map", "Work in progress", "Decisions",
+                               "Ideas"]
     features = book["Features"]
     assert features["A1"].value.startswith("Generated ") and "Do not edit" in features["A1"].value
     assert [c.value for c in features[2]][:7] == ["ID", "Title", "Area", "Priority", "Release", "Status", "Checks"]
@@ -113,13 +117,20 @@ def test_report_refuses_rather_than_leave_a_feature_out(product):
     assert not (product.root / "LEDGER.xlsx").exists()
 
 
-def test_status_brief_gives_the_counts_and_the_next_step(product):
+def test_status_brief_gives_the_counts_and_each_cards_next_step(product):
     product.write("charter/features/F-014-track-my-order.md", FEATURE_F014)
-    product.write("charter/handoff.md", "# Handoff\n\n## Exact next step\n\n- Add the delivery date to the page\n")
+    product.run("card", "new", "Order page", "--serves", "F-014.a")
+    card = next((product.root / "charter/cards").glob("CARD-001-*.md"))
+    card.write_text(card.read_text().replace("- Next step:", "- Next step: add the delivery date to the page"))
     output = product.run("status", "--brief").output
     assert "Demo Store · mode standard" in output
     assert "Features: 1 (1 Agreed)" in output
-    assert "Next step (handoff): Add the delivery date to the page" in output
+    assert "Open card CARD-001 Order page (F-014.a): next step: add the delivery date to the page" in output
+
+
+def test_a_leftover_handoff_file_is_pointed_at(product):
+    product.write("charter/handoff.md", "# Handoff\n")
+    assert "handoff.md is no longer used" in product.run("check").output
 
 
 def test_every_guide_is_packaged_and_listed():

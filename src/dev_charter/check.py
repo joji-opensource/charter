@@ -9,9 +9,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__, git, hooks
-from .agents import AGENTS_FILE, block_version
-from .store import PLACEHOLDER_RE, Project
+from . import git, hooks
+from .agents import AGENTS_FILE, block_version, minor
+from .store import LEGACY_HANDOFF_FILE, PLACEHOLDER_RE, Project
 from .trace import Trace
 
 PROBLEM, WARNING = "problem", "warning"
@@ -106,9 +106,14 @@ def run(project: Project, trace: Trace | None = None, changes: dict[Path, str] |
     if written_by is None:
         findings.append(Finding(WARNING, f"{AGENTS_FILE} has no Dev Charter block, so coding agents do not know the "
                                 "rules. Run `dev-charter sync`.", config.root / AGENTS_FILE))
-    elif written_by != __version__:
+    elif written_by != minor():
         findings.append(Finding(WARNING, f"The block in {AGENTS_FILE} was written by Dev Charter {written_by}; "
-                                f"{__version__} is installed. Run `dev-charter sync`.", config.root / AGENTS_FILE))
+                                f"{minor()} is installed. Run `dev-charter sync`.", config.root / AGENTS_FILE))
+    legacy = config.charter_dir / LEGACY_HANDOFF_FILE
+    if legacy.exists():
+        findings.append(Finding(WARNING, f"charter/{LEGACY_HANDOFF_FILE} is no longer used: each task card keeps its "
+                                "own handoff now. Move its next step into the card it belongs to, then delete it.",
+                                legacy))
     for repo in hooks.missing_checks(config):
         findings.append(Finding(WARNING, f"Commits to {repo.path.name} are not checked. Run `dev-charter sync` to add "
                                 "the check.", repo.path))

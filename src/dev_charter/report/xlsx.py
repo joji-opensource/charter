@@ -211,14 +211,26 @@ def _summary(ws: Worksheet, snap: Snapshot) -> None:
         row += 1
     row += 1
 
-    row = _section(ws, row, "Open task cards")
+    row = _section(ws, row, "Open task cards on this branch")
     open_cards = [c for c in project.cards if c.state == "open"]
     for card in open_cards:
         ws.cell(row=row, column=1, value=f"{card.id} · {card.title}")
         ws.cell(row=row, column=2, value=", ".join(card.serves))
+        ws.cell(row=row, column=4, value=f"Next: {card.next_step}" if card.next_step else "")
         row += 1
     if not open_cards:
         ws.cell(row=row, column=1, value="None").font = NOTE_FONT
+        row += 1
+    row += 1
+
+    row = _section(ws, row, "Work in progress on other branches")
+    for work in snap.wip.branches:
+        ws.cell(row=row, column=1, value=f"{work.branch.name} ({work.branch.author}, {work.when:%d %b})")
+        ws.cell(row=row, column=2, value=", ".join(f"{c.id} {c.title}" for c in work.cards))
+        row += 1
+    if not snap.wip.branches:
+        ws.cell(row=row, column=1, value="None found" + (f" (compared with {snap.wip.base})" if snap.wip.base
+                                                          else "")).font = NOTE_FONT
 
 
 def _code_map(ws: Worksheet, snap: Snapshot) -> None:
@@ -240,6 +252,22 @@ def _code_map(ws: Worksheet, snap: Snapshot) -> None:
     _table(ws, note, [Column("Repository", 18), Column("File", 52), Column("What it is", 18),
                       Column("Serves", 46)], rows,
            styles={3: CODE_STYLE}, links={2: links}, freeze="C3")
+
+
+def _work_in_progress(ws: Worksheet, snap: Snapshot) -> None:
+    wip = snap.wip
+    rows = [
+        [work.branch.name, "yes" if work.branch.pushed else "not yet", work.branch.author,
+         f"{work.when:%d %b %Y %H:%M}", work.ahead, card.id, card.title, ", ".join(card.serves), card.next_step]
+        for work in wip.branches for card in work.cards
+    ]
+    note = _do_not_edit(snap)
+    if wip.base:
+        note += f" Open task cards on branches with work not yet merged into {wip.base}"
+        note += f", as of the last fetch on {wip.fetched:%d %b %H:%M}." if wip.fetched else "."
+    _table(ws, note, [Column("Branch", 30), Column("Pushed", 9), Column("Last commit by", 18), Column("When", 17),
+                      Column("Commits not merged", 11), Column("Card", 10), Column("Title", 30), Column("Serves", 22),
+                      Column("Next step", 50)], rows, freeze="B3")
 
 
 def write_xlsx(snap: Snapshot, path: Path) -> None:
@@ -278,6 +306,7 @@ def write_xlsx(snap: Snapshot, path: Path) -> None:
     ], styles={3: STATUS_STYLE}, links={11: [_relative(snap, p.path) for p in promises]})
 
     _code_map(wb.create_sheet("Code map"), snap)
+    _work_in_progress(wb.create_sheet("Work in progress"), snap)
 
     decisions = sorted(project.decisions, key=lambda d: d.id)
     _table(wb.create_sheet("Decisions"), note, [

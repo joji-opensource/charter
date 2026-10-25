@@ -82,6 +82,12 @@ def render(snap: Snapshot) -> str:
         for d in sorted(project.decisions, key=lambda d: d.id)
     ) or '<li class="empty">None yet.</li>'
     ideas = "".join(f"<li>{escape(i.text)}</li>" for i in project.ideas) or '<li class="empty">None yet.</li>'
+    work = "".join(
+        f"<li><strong>{escape(w.branch.name)}</strong> ({escape(w.branch.author)}, {w.when:%d %b}): "
+        + "; ".join(f"{escape(c.id)} {escape(c.title)}" + (f" (next: {escape(c.next_step)})" if c.next_step else "")
+                    for c in w.cards) + "</li>"
+        for w in snap.wip.branches
+    ) or '<li class="empty">None found.</li>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -100,6 +106,8 @@ def render(snap: Snapshot) -> str:
 {_entries_table(snap, project.features, with_area=True)}
 <h2>Promises</h2>
 {_entries_table(snap, project.promises, with_area=False)}
+<h2>Work in progress on other branches</h2>
+<ul class="plain">{work}</ul>
 <h2>Decisions</h2>
 <ul class="plain">{decisions}</ul>
 <h2>Ideas for later</h2>

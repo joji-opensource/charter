@@ -6,7 +6,8 @@ written for them, not for engineers.
 1. **Look first.** Read `charter/features/` and `charter/promises/`. If an existing one already covers the request,
    propose a change to it instead of a new one.
 2. **Create the file.** Run `dev-charter feature new "<short title>"`, adding `--area "<area>"` and
-   `--priority Must|Should|Could` when known. It prints the file and its ID. Never write an ID yourself.
+   `--priority Must|Should|Could` when known. It prints the file and its ID. Never write an ID yourself. If a
+   teammate's branch already used that ID, `dev-charter renumber F-nnn` moves yours, with every reference to it.
 3. **Fill it in.**
    - **As a**: one role from `charter.toml` (`[words] roles`).
    - **I want to**: what they want to do, in their words.

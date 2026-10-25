@@ -37,6 +37,7 @@ class Config:
     mode: str
     versions: str
     repos: tuple[Repo, ...]
+    integration_branch: str = ""  # the branch work is merged into; empty means the remote's default branch
     roles: tuple[str, ...] = ()
     areas: tuple[str, ...] = ()
     internal_words: tuple[str, ...] = ()
@@ -100,6 +101,7 @@ def load(root: Path) -> Config:
         mode=mode,
         versions=versions,
         repos=tuple(repos),
+        integration_branch=str(product.get("integration_branch") or ""),
         roles=tuple(str(r) for r in words.get("roles") or ()),
         areas=tuple(str(a) for a in words.get("areas") or ()),
         internal_words=tuple(str(w) for w in words.get("internal") or ()),
@@ -142,6 +144,7 @@ def render(
     roles: list[str],
     areas: list[str],
     versions: str | None = None,
+    integration_branch: str = "",
 ) -> str:
     """The text of a new charter.toml."""
     if mode not in MODES:
@@ -158,6 +161,8 @@ def render(
         noted(f"mode = {json.dumps(mode)}", "light | standard | strict"),
         noted(f"dev-charter = {json.dumps(versions or version_range())}",
               "the Dev Charter versions this project works with"),
+        noted(f"integration_branch = {json.dumps(integration_branch)}",
+              "the branch work is merged into; empty means the remote's default"),
         "",
     ]
     for repo in repos or ["."]:

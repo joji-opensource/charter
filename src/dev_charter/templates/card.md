@@ -15,6 +15,17 @@ state: open                   # open | done
 
 - <the check that decides this card is done>
 
+## Allowed paths
+
+<!-- Strict mode only: the files this card may change, one per line, relative to the product folder: - shop/orders/** -->
+
 ## Blockers
 
 <!-- Changes outside this card that passed the blocker test (dev-charter guide build): date · file · why -->
+
+## Handoff
+
+- Done, with evidence:
+- In progress:
+- Parked:
+- Next step:

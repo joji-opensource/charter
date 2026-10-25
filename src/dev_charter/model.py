@@ -136,6 +136,8 @@ class Card:
     state: str
     serves: list[str]
     goal: str
+    next_step: str = ""  # from the card's Handoff section
+    allowed: tuple[str, ...] = ()  # the paths it may change, enforced in Strict mode
 
 
 @dataclass(frozen=True)

@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+import time
 from pathlib import Path
 
 import click
 
-from . import __version__, agents, check, config, git, guides, hooks, store
+from . import __version__, agents, check, ci, config, git, guides, hooks, pr, publish, renumber, store, strict, wip
 from . import trace as trace_module
 from .errors import CharterError
 from .model import CARD, DECISION, FEATURE, PRIORITIES, PROMISE, Kind
@@ -66,9 +68,13 @@ def main(ctx: click.Context, root: Path | None) -> None:
               "Defaults to this folder.")
 @click.option("--area", "areas", multiple=True, help="A product area, such as 'Checkout'. Repeat for each.")
 @click.option("--role", "roles", multiple=True, help="A kind of user, such as 'customer'. Repeat for each.")
+@click.option("--integration-branch", default="", help="The branch work is merged into. Defaults to the remote's "
+              "default branch.")
+@click.option("--owner", default="", help="The GitHub name (@name) whose approval a pull request needs to change "
+              "features, promises or decisions.")
 @click.option("--yes", is_flag=True, help="Use the defaults for anything not given; ask nothing.")
 @click.pass_context
-def init(ctx: click.Context, name, mode, repos, areas, roles, yes) -> None:
+def init(ctx: click.Context, name, mode, repos, areas, roles, integration_branch, owner, yes) -> None:
     """Set up Dev Charter in this product. Safe to run again: it only adds what is missing."""
     root: Path = ctx.obj["start"]
     if not root.is_dir():
@@ -97,7 +103,8 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, yes) -> None:
             if not (root / repo).is_dir():
                 raise CharterError(f"The repository folder '{repo}' does not exist under {root}.")
         config_path.write_text(
-            config.render(name or root.name, mode or "standard", repos, list(roles), list(areas)), encoding="utf-8"
+            config.render(name or root.name, mode or "standard", repos, list(roles), list(areas),
+                          integration_branch=integration_branch), encoding="utf-8"
         )
         done.append(f"created {config.CONFIG_FILE}")
 
@@ -108,17 +115,22 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, yes) -> None:
             folder.mkdir(parents=True)
             (folder / ".gitkeep").touch()
             done.append(f"created {config.CHARTER_DIR}/{kind.folder}/")
-    for filename in (store.IDEAS_FILE, store.HANDOFF_FILE):
-        path = charter_dir / filename
-        if not path.exists():
-            path.write_text(store.template(filename), encoding="utf-8")
-            done.append(f"created {config.CHARTER_DIR}/{filename}")
+    ideas = charter_dir / store.IDEAS_FILE
+    if not ideas.exists():
+        ideas.write_text(store.template(store.IDEAS_FILE), encoding="utf-8")
+        done.append(f"created {config.CHARTER_DIR}/{store.IDEAS_FILE}")
 
     outcome = agents.write_block(root)
     if outcome != "unchanged":
         done.append(f"{outcome} the Dev Charter section of {agents.AGENTS_FILE}")
-    if _ignore_generated(root):
-        done.append("added LEDGER.xlsx and status.html to .gitignore")
+    if _add_lines(root / ".gitignore", [f"/{name}" for name in GENERATED] + [f"/{strict.LOCAL_DIR}/"],
+                  "# Dev Charter: generated views, and this clone's own settings"):
+        done.append("added the generated files to .gitignore")
+    if _add_lines(root / ".gitattributes", [f"{config.CHARTER_DIR}/{store.IDEAS_FILE} merge=union"],
+                  "# Dev Charter: ideas parked on different branches merge line by line"):
+        done.append("made ideas.md merge line by line across branches (.gitattributes)")
+    if owner:
+        done.append(_codeowners(root, owner))
     done += hooks.install(config.load(root))
 
     click.echo(f"Dev Charter is set up in {root}.")
@@ -131,17 +143,41 @@ def _split(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
-def _ignore_generated(root: Path) -> bool:
-    path = root / ".gitignore"
+def _add_lines(path: Path, lines: list[str], comment: str) -> bool:
+    """Add the lines a file lacks, under a comment, leaving everything already there alone."""
     text = path.read_text(encoding="utf-8") if path.exists() else ""
-    present = {line.strip().lstrip("/") for line in text.splitlines()}
-    missing = [name for name in GENERATED if name not in present]
+    present = {line.strip() for line in text.splitlines()}
+    missing = [line for line in lines if line not in present]
     if not missing:
         return False
     prefix = text if not text or text.endswith("\n") else text + "\n"
-    block = ("\n" if prefix else "") + "# Dev Charter: generated views, rebuilt by `dev-charter report`\n"
-    path.write_text(prefix + block + "".join(f"/{name}\n" for name in missing), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(prefix + ("\n" if prefix else "") + comment + "\n" + "".join(f"{line}\n" for line in missing),
+                    encoding="utf-8")
     return True
+
+
+def _codeowners(root: Path, owner: str) -> str:
+    if git.toplevel(root) != root.resolve():
+        return "no CODEOWNERS written: this folder is inside a bigger git repository."
+    owner = owner if owner.startswith("@") else f"@{owner}"
+    lines = [f"/{config.CHARTER_DIR}/{kind.folder}/ {owner}" for kind in (FEATURE, PROMISE, DECISION)]
+    _add_lines(root / ".github" / "CODEOWNERS", lines,
+               "# Dev Charter: product changes need the product owner's approval")
+    return (f"pull requests that change features, promises or decisions now need {owner}'s approval once GitHub's "
+            "'Require review from Code Owners' is turned on for the integration branch")
+
+
+@main.command(name="ci")
+@click.pass_context
+def ci_command(ctx: click.Context) -> None:
+    """Write the GitHub workflow that checks each pull request and keeps the team's ledger on the `ledger` branch."""
+    cfg = _open(ctx)
+    path, outcome = ci.write(cfg)
+    click.echo(f"{_shown(cfg, path)}: {outcome}. Commit it; then pull requests get a plain-English summary and checks, "
+               "and the `ledger` branch holds the team's LEDGER.xlsx after each merge.")
+    if not any(repo.results for repo in cfg.repos):
+        click.echo('Set `results = ["reports/*.xml"]` in charter.toml so statuses include the tests the workflow runs.')
 
 
 @main.command()
@@ -162,6 +198,10 @@ def sync(ctx: click.Context) -> None:
 def _created(cfg: config.Config, kind: Kind, new_id: str, path: Path) -> None:
     click.echo(f"Created {new_id} in {_shown(cfg, path)}.")
     click.echo(f"Fill in every line marked <…>, following `dev-charter guide {_guide_for(kind)}`.")
+    fetched = git.last_fetch(cfg.root)
+    if git.has_remote(cfg.root) and (fetched is None or time.time() - fetched > 86400):
+        click.echo(f"This clone has not fetched in over a day, so a teammate may already have used {new_id}. Run "
+                   f"`git fetch`; if it was taken, `dev-charter renumber {new_id}` moves this one on.")
 
 
 def _guide_for(kind: Kind) -> str:
@@ -251,6 +291,25 @@ def park(ctx: click.Context, idea: str, source: str) -> None:
     click.echo(f"Parked in {_shown(cfg, path)}. A person decides whether it becomes work.")
 
 
+@main.command(name="renumber")
+@click.argument("item_id")
+@click.option("--to", "new_id", default=None, help="The new ID. Defaults to the next one never used.")
+@click.pass_context
+def renumber_command(ctx: click.Context, item_id: str, new_id: str | None) -> None:
+    """Move a feature, promise, decision or card to a new ID, with every reference to it."""
+    cfg = _open(ctx)
+    trace = trace_module.collect(cfg)
+    done = renumber.renumber(cfg, store.load_project(cfg), trace, item_id, new_id)
+    click.echo(f"Renumbered {done.old} to {done.new}: {_shown(cfg, done.path)}.")
+    for path, line, text in done.changed:
+        click.echo(f"  changed {_shown(cfg, path)}:{line}  {text}")
+    if done.listed:
+        click.echo(f"These lines still mention {done.old} and were left alone; check each one:")
+        for path, line, text in done.listed:
+            click.echo(f"  {_shown(cfg, path)}:{line}  {text}")
+    click.echo("Run the tests again so their results use the new ID.")
+
+
 # --- reading the charter ---------------------------------------------------------------------------------------------
 
 
@@ -278,7 +337,7 @@ def report(ctx: click.Context, quiet: bool) -> None:
     if project.problems:
         lines = "\n".join(f"  {p.where(cfg.root)}: {p.message}" for p in project.problems)
         raise CharterError(f"The report was not rebuilt, so it never leaves out a feature. Fix these first:\n{lines}")
-    paths = write_reports(take_snapshot(project, trace_module.collect(cfg)))
+    paths = write_reports(take_snapshot(project, trace_module.collect(cfg), wip.collect(cfg)))
     if not quiet:
         click.echo("Rebuilt " + " and ".join(_shown(cfg, p) for p in paths) + ".")
 
@@ -290,8 +349,10 @@ def status(ctx: click.Context, brief: bool) -> None:
     """Where the product stands."""
     cfg = _open(ctx)
     project = store.load_project(cfg)
-    snap = take_snapshot(project, trace_module.collect(cfg))
-    click.echo(f"{cfg.product} · mode {cfg.mode} · Dev Charter {__version__}")
+    snap = take_snapshot(project, trace_module.collect(cfg), wip.collect(cfg))
+    until = strict.strict_until(cfg)
+    mode = f"{cfg.mode}, Strict until {until:%H:%M}" if until and cfg.mode != "strict" else cfg.mode
+    click.echo(f"{cfg.product} · mode {mode} · Dev Charter {__version__}")
     for label, entries in (("Features", project.features), ("Promises", project.promises)):
         counts = snap.counts(entries)
         parts = " · ".join(f"{counts[name]} {name}" for name in ORDER if counts[name])
@@ -300,12 +361,22 @@ def status(ctx: click.Context, brief: bool) -> None:
     if active:
         click.echo(f"Proven or live: {done} of {active} agreed features")
     open_cards = [c for c in project.cards if c.state == "open"]
-    if open_cards:
-        click.echo("Open cards: " + "; ".join(f"{c.id} {c.title} ({', '.join(c.serves) or 'serves nothing yet'})"
-                                             for c in open_cards))
-    next_step = _next_step(cfg)
-    if next_step:
-        click.echo(f"Next step (handoff): {next_step}")
+    for card_ in open_cards:
+        click.echo(f"Open card {card_.id} {card_.title} ({', '.join(card_.serves) or 'serves nothing yet'})"
+                   + (f": next step: {card_.next_step}" if card_.next_step else ""))
+    if not open_cards:
+        latest = max(project.cards, key=lambda c: c.path.stat().st_mtime, default=None)
+        if latest and latest.next_step:
+            click.echo(f"Next step (from {latest.id}): {latest.next_step}")
+    shown = snap.wip.branches[: (5 if brief else len(snap.wip.branches))]
+    if shown:
+        click.echo(f"Work in progress on other branches (not yet merged into {snap.wip.base}):")
+        for work in shown:
+            cards = "; ".join(f"{c.id} {c.title} ({', '.join(c.serves)})" for c in work.cards)
+            click.echo(f"  {work.branch.name} ({work.branch.author}, {work.when:%d %b}"
+                       f"{'' if work.branch.pushed else ', not pushed'}): {cards}")
+    if hooks.missing_checks(cfg):
+        click.echo("Commits in this clone are not checked yet: run `dev-charter sync`.")
     if project.problems:
         click.echo(f"{len(project.problems)} file(s) have problems; run `dev-charter check`.")
     if brief:
@@ -316,21 +387,6 @@ def status(ctx: click.Context, brief: bool) -> None:
             click.echo(f"\n{name}:")
             for entry in sorted(members, key=lambda e: e.id):
                 click.echo(f"  {entry.id}  {entry.title}  ({snap.of(entry).checks})")
-
-
-def _next_step(cfg: config.Config) -> str:
-    path = cfg.charter_dir / store.HANDOFF_FILE
-    if not path.is_file():
-        return ""
-    in_section = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("## "):
-            in_section = line[3:].strip().lower() == "exact next step"
-            continue
-        text = line.strip().lstrip("-").strip()
-        if in_section and text and not text.startswith("<!--"):
-            return text
-    return ""
 
 
 @main.command(name="check")
@@ -364,3 +420,77 @@ def check_command(ctx: click.Context, staged: bool) -> None:
         if staged:
             click.echo("The commit was stopped. Fix the problems above, then commit again.")
         ctx.exit(1)
+
+
+# --- Claude Code and CI ----------------------------------------------------------------------------------------------
+
+
+@main.command(name="strict")
+@click.argument("switch", type=click.Choice(["on", "off"]))
+@click.option("--hours", default=12.0, show_default=True, help="How long Strict mode stays on.")
+@click.pass_context
+def strict_command(ctx: click.Context, switch: str, hours: float) -> None:
+    """Turn Strict mode on or off in this clone only, for an unattended run: Claude Code may then change only the
+    paths an open task card allows."""
+    cfg = _open(ctx)
+    if switch == "on":
+        until = strict.turn_on(cfg, hours)
+        click.echo(f"Strict mode is on in this clone until {until:%d %b %H:%M}. Claude Code can change only the "
+                   "Allowed paths of open task cards, and never a sign-off or a state.")
+    else:
+        strict.turn_off(cfg)
+        click.echo(f"Strict mode is off in this clone; the product's mode is {cfg.mode}.")
+
+
+@main.command(hidden=True)
+def guard() -> None:
+    """Claude Code's PreToolUse hook: refuses an edit Strict mode does not allow. Prints nothing to allow."""
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+        reason = strict.decide(payload, Path.cwd())
+    except Exception as exc:  # a broken guard must never stop someone's work
+        click.echo(f"Dev Charter's guard could not run ({exc}); the edit was allowed.", err=True)
+        return
+    if reason:
+        click.echo(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                      "permissionDecisionReason": reason}}))
+
+
+@main.command(name="pr-summary")
+@click.option("--base", required=True, help="The branch the pull request merges into, such as origin/main.")
+@click.option("--comment", is_flag=True, help="Also post it on the pull request (needs GH_TOKEN and PR_NUMBER).")
+@click.pass_context
+def pr_summary(ctx: click.Context, base: str, comment: bool) -> None:
+    """Summarise, in plain English, what a pull request changes in the product; fail on what must be fixed."""
+    cfg = _open(ctx)
+    summary = pr.summarise(cfg, store.load_project(cfg), trace_module.collect(cfg), base)
+    click.echo(summary.markdown)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        with open(step_summary, "a", encoding="utf-8") as handle:
+            handle.write(summary.markdown)
+    if comment and os.environ.get("PR_NUMBER"):
+        _post_comment(cfg.root, os.environ["PR_NUMBER"], summary.markdown)
+    if summary.problems:
+        ctx.exit(1)
+
+
+def _post_comment(root: Path, number: str, body: str) -> None:
+    import subprocess
+
+    marker = "<!-- dev-charter summary -->"
+    for args in (["gh", "pr", "comment", number, "--edit-last", "--body", marker + "\n" + body],
+                 ["gh", "pr", "comment", number, "--body", marker + "\n" + body]):
+        if subprocess.run(args, cwd=root, capture_output=True).returncode == 0:
+            return
+    click.echo("The summary could not be posted on the pull request (it is in the job summary instead).", err=True)
+
+
+@main.command(name="publish")
+@click.option("--branch", default=publish.LEDGER_BRANCH, show_default=True, help="The branch the ledger goes on.")
+@click.pass_context
+def publish_command(ctx: click.Context, branch: str) -> None:
+    """Put LEDGER.xlsx and status.html on the team's ledger branch (run by CI after each merge)."""
+    cfg = _open(ctx)
+    commit = publish.publish(cfg, branch)
+    click.echo(f"The team's ledger is on the `{branch}` branch ({commit[:7]}).")

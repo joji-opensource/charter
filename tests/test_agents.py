@@ -2,16 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from dev_charter import __version__, agents
+from dev_charter import agents
 from dev_charter.errors import CharterError
 
 
 def test_the_block_is_created_when_there_is_no_agents_file(tmp_path):
     assert agents.write_block(tmp_path) == "created"
     text = (tmp_path / "AGENTS.md").read_text()
-    assert text.startswith(f"<!-- dev-charter:start v{__version__} -->")
+    assert text.startswith(f"<!-- dev-charter:start v{agents.minor()} -->")
     assert "dev-charter guide <stage>" in text
-    assert agents.block_version(tmp_path) == __version__
+    assert agents.block_version(tmp_path) == agents.minor()
+
+
+def test_the_marker_carries_the_minor_version_only():
+    assert agents.minor("0.1.2") == agents.minor("0.1.7") == "0.1"
 
 
 def test_text_outside_the_block_is_never_touched(tmp_path):

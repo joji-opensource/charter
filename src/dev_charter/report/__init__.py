@@ -17,6 +17,7 @@ from ..model import Entry
 from ..status import ORDER, Status, status
 from ..store import Project
 from ..trace import Trace
+from ..wip import WorkInProgress
 
 LEDGER_FILE = "LEDGER.xlsx"
 STATUS_FILE = "status.html"
@@ -31,8 +32,10 @@ class Snapshot:
     statuses: dict[str, Status]
     generated: datetime
     commit: str | None = None
+    branch: str = ""
     uncommitted: bool = False
     recent: list[str] = field(default_factory=list)  # IDs whose files changed in the last 7 days
+    wip: WorkInProgress = field(default_factory=lambda: WorkInProgress(None, None))
 
     def of(self, entry: Entry) -> Status:
         return self.statuses[entry.id]
@@ -43,7 +46,8 @@ class Snapshot:
         if self.commit is None:
             source = "files that are not in git"
         else:
-            source = f"commit {self.commit[:7]}" + (" with uncommitted changes" if self.uncommitted else "")
+            on = f"branch {self.branch} at " if self.branch and self.branch != "HEAD" else ""
+            source = f"{on}commit {self.commit[:7]}" + (" with uncommitted changes" if self.uncommitted else "")
         return f"Generated {when} from {source}."
 
     def counts(self, entries: list[Entry]) -> dict[str, int]:
@@ -81,12 +85,15 @@ class Snapshot:
         return "\n".join(lines)
 
 
-def take_snapshot(project: Project, trace: Trace | None = None) -> Snapshot:
+def take_snapshot(project: Project, trace: Trace | None = None, wip: WorkInProgress | None = None) -> Snapshot:
     root = project.config.root
     trace = trace or Trace()
     statuses = {entry.id: status(entry, trace.outcomes, trace.tagged) for entry in project.entries}
     snap = Snapshot(project, trace, statuses, datetime.now())
+    if wip is not None:
+        snap.wip = wip
     snap.commit = git.head(root)
+    snap.branch = git.current_branch(root) if snap.commit else ""
     if snap.commit:
         # Untracked files are listed one by one; otherwise git folds a new folder into a single line.
         snap.uncommitted = bool((git.run(root, "status", "--porcelain", "--untracked-files=all", "--", ".")

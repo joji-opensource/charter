@@ -13,7 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from .config import Config
+from . import git
+from .config import CHARTER_DIR, Config
 from .errors import CharterError, FileProblem
 from .model import (
     CARD,
@@ -33,7 +34,7 @@ from .model import (
 )
 
 IDEAS_FILE = "ideas.md"
-HANDOFF_FILE = "handoff.md"
+LEGACY_HANDOFF_FILE = "handoff.md"  # one handoff per product, before handoffs moved into cards
 
 LABEL_RE = re.compile(r"^\*\*(?P<label>[^*]+?)\*\*\s*(?P<text>.*)$")
 CRITERION_RE = re.compile(r"^-\s+\*\*(?P<letter>[a-z])\.\*\*\s*(?P<text>.*)$")
@@ -80,9 +81,12 @@ class Project:
 # --- parsing ---------------------------------------------------------------------------------------------------------
 
 
-def parse(path: Path, kind: Kind) -> Parsed:
-    """Split a charter file into its details block, labelled story and sections."""
-    lines = path.read_text(encoding="utf-8").splitlines()
+def parse(path: Path, kind: Kind, text: str | None = None) -> Parsed:
+    """Split a charter file into its details block, labelled story and sections.
+
+    `text` is the file's content when it comes from somewhere other than the disk, such as another branch.
+    """
+    lines = (path.read_text(encoding="utf-8") if text is None else text).splitlines()
     if not lines or lines[0].strip() != "---":
         raise FileProblem(
             path, 1, "The file must start with a line of three dashes (---), then the details (id, title, …), "
@@ -277,8 +281,8 @@ def _placeholders(parsed: Parsed, criteria: list[Criterion]) -> list[tuple[int, 
     return found
 
 
-def read_entry(path: Path, kind: Kind) -> Entry:
-    parsed = parse(path, kind)
+def read_entry(path: Path, kind: Kind, text: str | None = None) -> Entry:
+    parsed = parse(path, kind, text)
     entry_id = _require_id(parsed, kind)
     title = _require_text(parsed, "title")
     state = str(parsed.meta.get("state") or "")
@@ -310,8 +314,8 @@ def read_entry(path: Path, kind: Kind) -> Entry:
     )
 
 
-def read_decision(path: Path) -> Decision:
-    parsed = parse(path, DECISION)
+def read_decision(path: Path, text: str | None = None) -> Decision:
+    parsed = parse(path, DECISION, text)
     decision_id = _require_id(parsed, DECISION)
     title = _require_text(parsed, "title")
     _require_labels(parsed, DECISION)
@@ -335,8 +339,21 @@ def read_decision(path: Path) -> Decision:
     )
 
 
-def read_card(path: Path) -> Card:
-    parsed = parse(path, CARD)
+def _section_lines(parsed: Parsed, heading: str) -> list[str]:
+    return [raw.strip() for _, raw in parsed.sections.get(heading, [])
+            if raw.strip() and not raw.strip().startswith("<!--")]
+
+
+def _next_step(parsed: Parsed) -> str:
+    for line in _section_lines(parsed, "Handoff"):
+        label, _, text = line.lstrip("-").strip().partition(":")
+        if label.strip().lower() == "next step" and text.strip():
+            return text.strip()
+    return ""
+
+
+def read_card(path: Path, text: str | None = None) -> Card:
+    parsed = parse(path, CARD, text)
     card_id = _require_id(parsed, CARD)
     title = _require_text(parsed, "title")
     state = str(parsed.meta.get("state") or "open")
@@ -351,6 +368,8 @@ def read_card(path: Path) -> Card:
         state=state,
         serves=_list_of(parsed, "serves", CRITERION_REF_RE, "F-014.a"),
         goal=parsed.labels["Goal"][0],
+        next_step=_next_step(parsed),
+        allowed=tuple(line.lstrip("-").strip().strip("`") for line in _section_lines(parsed, "Allowed paths")),
     )
 
 
@@ -410,13 +429,16 @@ def slug(title: str) -> str:
     return text[:48].rstrip("-") or "untitled"
 
 
+def used_ids(config: Config, kind: Kind) -> set[int]:
+    """Every number this kind has used: on disk, and on any branch in git's history, deleted ones included."""
+    names = {path.name for path in (config.charter_dir / kind.folder).glob(f"{kind.prefix}-*.md")}
+    names |= git.names_in_history(config.root, f"{CHARTER_DIR}/{kind.folder}")
+    return {int(match.group(1)) for name in names if (match := re.match(rf"^{kind.prefix}-(\d+)", name))}
+
+
 def next_id(config: Config, kind: Kind) -> str:
-    numbers = [
-        int(match.group(1))
-        for path in (config.charter_dir / kind.folder).glob(f"{kind.prefix}-*.md")
-        if (match := re.match(rf"^{kind.prefix}-(\d+)", path.name))
-    ]
-    return kind.format_id(max(numbers, default=0) + 1)
+    """The next ID after every one ever used, so an ID is never given out twice, even across branches."""
+    return kind.format_id(max(used_ids(config, kind), default=0) + 1)
 
 
 def create(config: Config, kind: Kind, title: str, values: dict[str, str] | None = None) -> tuple[str, Path]:
