@@ -17,7 +17,8 @@ written for them, not for engineers.
    - **Done means**: one line per thing a person or a test can check (`a.`, `b.`, `c.` …). Specific and observable
      ("a text message is sent when the order goes out for delivery"), never vague ("works well", "is fast").
 4. **Keep it short.** Under 250 words. Longer usually means two features.
-5. **Leave `state: idea`.** The person moves it to `agreed`. Never write a sign-off.
+5. **Leave `state: idea`.** The person agrees it, in the My decision column of `LEDGER.xlsx` or by asking you.
+   Never write a sign-off.
 6. **Reply with the feature and your additions.** Show what you wrote, and list every Done-means line the person did
    not ask for, so they keep or remove it. Ask about anything you guessed.
 

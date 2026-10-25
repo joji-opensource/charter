@@ -64,7 +64,7 @@ def test_code_shows_under_each_check_and_in_the_code_map(product: Product):
                   "# serves: F-014.c — someone else's order asks to sign in\ndef status(order, viewer):\n    pass\n")
     product.run("report")
     book = load_workbook(product.root / "LEDGER.xlsx")
-    done = book["Features"]["O3"].value.splitlines()
+    done = book["Features"]["Q3"].value.splitlines()
     assert done[2].endswith("never their order — shop/orders.py:4")
     assert done[0].endswith("expected delivery date")
     serves = book["Code map"]["D3"].value.splitlines()

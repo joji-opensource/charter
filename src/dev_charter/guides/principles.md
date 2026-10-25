@@ -9,7 +9,9 @@ These apply to every change, every line of code and every sentence a person will
 - Decide the obvious yourself and keep going. Bring the consequential to the person with a recommendation and the
   reason: a choice between designs, adding or dropping scope, naming, anything hard to undo. Never ask about
   trivia; never decide the consequential alone.
-- People write sign-offs, change a feature's or promise's `state`, and decide when to commit. You never do.
+- People decide sign-offs, the `state` and `priority` of features and promises, and when to commit. You change a
+  state or a priority, or write a sign-off, only when a person explicitly asks and names the items, and you say
+  exactly what you changed.
 
 ## Build the real thing
 

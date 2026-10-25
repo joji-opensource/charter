@@ -14,6 +14,7 @@ from pathlib import Path
 from .. import git
 from ..errors import CharterError
 from ..model import Entry
+from ..owner_review import Review, unimported
 from ..status import ORDER, Status, status
 from ..store import Project
 from ..trace import Trace
@@ -120,12 +121,28 @@ def write_atomically(path: Path, write: Callable[[Path], None]) -> None:
         temp_path.unlink(missing_ok=True)
 
 
-def write_reports(snap: Snapshot) -> list[Path]:
+def write_reports(snap: Snapshot, *, replace_review: bool = False) -> tuple[list[Path], Review | None]:
+    """Rebuild both files. LEDGER.xlsx is left as it is while it holds a review not yet imported (unless
+    `replace_review`, right after importing it); that review is returned, so the person can be told."""
     from .html import write_html
     from .xlsx import write_xlsx
 
     root = snap.project.config.root
     ledger, page = root / LEDGER_FILE, root / STATUS_FILE
-    write_atomically(ledger, lambda p: write_xlsx(snap, p))
+    written = []
+    try:
+        waiting = None if replace_review else unimported(snap.project, ledger)
+    except CharterError as exc:
+        raise CharterError(f"{LEDGER_FILE} was not rebuilt: {exc} It is kept in case it holds your review; if it holds "
+                           "nothing you need, delete it and run `dev-charter report`.") from exc
+    if waiting is None:
+        write_atomically(ledger, lambda p: write_xlsx(snap, p))
+        written.append(ledger)
     write_atomically(page, lambda p: write_html(snap, p))
-    return [ledger, page]
+    written.append(page)
+    return written, waiting
+
+
+def kept_message(waiting: Review) -> str:
+    return (f"{LEDGER_FILE} was not rebuilt, so your review in it is kept: it holds {waiting.summary()} not imported "
+            "yet. Ask your coding agent to import your review, or run `dev-charter import`.")

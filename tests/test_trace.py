@@ -137,9 +137,9 @@ def test_one_red_test_turns_a_proven_feature_at_risk(git_product: Product):
     shop.run("report")
     book = load_workbook(shop.root / "LEDGER.xlsx")
     features = book["Features"]
-    assert (features["F3"].value, features["G3"].value) == ("Proven", "3 of 3 checks passing")
-    assert features["H3"].value == "shop: shop/orders/status.py"
-    assert features["I3"].value.startswith("2 automated checks (2 passed)")
+    assert (features["H3"].value, features["I3"].value) == ("Proven", "3 of 3 checks passing")
+    assert features["J3"].value == "shop: shop/orders/status.py"
+    assert features["K3"].value.startswith("2 automated checks (2 passed)")
     code_map = {row[1].value: row for row in book["Code map"].iter_rows(min_row=3)}
     assert [code_map[p][2].value for p in ("shop/legacy.py", "shop/money.py", "shop/orders/status.py")] == [
         "Unexplained", "Shared foundation", "Feature code"]
@@ -150,8 +150,8 @@ def test_one_red_test_turns_a_proven_feature_at_risk(git_product: Product):
     shop.write("reports/junit.xml", JUNIT.format(c='<failure message="opened another order"/>'))
     shop.run("report")
     features = load_workbook(shop.root / "LEDGER.xlsx")["Features"]
-    assert (features["F3"].value, features["G3"].value) == ("At risk", "2 of 3 checks passing")
-    assert "✗ c." in features["O3"].value
+    assert (features["H3"].value, features["I3"].value) == ("At risk", "2 of 3 checks passing")
+    assert "✗ c." in features["Q3"].value
 
     output = shop.run("check").output
     assert "test_F099_a_not_in_the_charter' names a feature or promise that is not in charter/" in output

@@ -22,6 +22,7 @@ from . import (
     git,
     guides,
     hooks,
+    owner_review,
     pr,
     publish,
     remind,
@@ -33,7 +34,7 @@ from . import (
 from . import trace as trace_module
 from .errors import CharterError
 from .model import CARD, DECISION, FEATURE, PRIORITIES, PROMISE, Kind
-from .report import GENERATED, take_snapshot, write_reports
+from .report import GENERATED, LEDGER_FILE, kept_message, take_snapshot, write_reports
 from .status import ORDER
 
 ID_REF_RE = re.compile(r"^[FP]-\d{3,}(\.[a-z])?$")
@@ -142,12 +143,7 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, integration_branch
                     "(upgrade with `uv tool upgrade dev-charter`)")
     elif outcome != "unchanged":
         done.append(f"{outcome} the Dev Charter section of {agents.AGENTS_FILE}")
-    if _add_lines(root / ".gitignore", [f"/{name}" for name in GENERATED] + [f"/{strict.LOCAL_DIR}/"],
-                  "# Dev Charter: generated views, and this clone's own settings"):
-        done.append("added the generated files to .gitignore")
-    if _add_lines(root / ".gitattributes", [f"{config.CHARTER_DIR}/{store.IDEAS_FILE} merge=union"],
-                  "# Dev Charter: ideas parked on different branches merge line by line"):
-        done.append("made ideas.md merge line by line across branches (.gitattributes)")
+    done += _git_files(root)
     if owner:
         done.append(_codeowners(root, owner))
     done += hooks.install(config.load(root))
@@ -156,6 +152,28 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, integration_branch
     for line in done:
         click.echo(f"  - {line}")
     click.echo('Next: add your first feature with `dev-charter feature new "<title>"`, or ask your coding agent to.')
+
+
+def _git_files(root: Path) -> list[str]:
+    """Keep the generated files out of git, and let the files every branch adds to merge line by line."""
+    done = []
+    ignored = (
+        ([f"/{name}" for name in GENERATED] + [f"/{strict.LOCAL_DIR}/"],
+         "# Dev Charter: generated views, and this clone's own settings"),
+        ([f"/~${LEDGER_FILE}"], f"# Dev Charter: the lock file Excel keeps while {LEDGER_FILE} is open"),
+    )
+    if any([_add_lines(root / ".gitignore", lines, comment) for lines, comment in ignored]):
+        done.append("added Dev Charter's lines to .gitignore")
+    merged = (
+        ([store.IDEAS_FILE], "# Dev Charter: ideas parked on different branches merge line by line"),
+        ([owner_review.NOTES_FILE, owner_review.LOG_FILE],
+         "# Dev Charter: review notes and the review log merge line by line"),
+    )
+    for names, comment in merged:
+        if _add_lines(root / ".gitattributes", [f"{config.CHARTER_DIR}/{name} merge=union" for name in names],
+                      comment):
+            done.append(f"made {' and '.join(names)} merge line by line across branches (.gitattributes)")
+    return done
 
 
 def _split(text: str) -> list[str]:
@@ -202,8 +220,8 @@ def ci_command(ctx: click.Context) -> None:
 @main.command()
 @click.pass_context
 def sync(ctx: click.Context) -> None:
-    """Refresh what Dev Charter manages (the AGENTS.md section and the git hooks) after an upgrade or a change of
-    mode."""
+    """Refresh what Dev Charter manages (the AGENTS.md section, the git hooks, and its lines in .gitignore and
+    .gitattributes) after an upgrade or a change of mode."""
     cfg = _open(ctx)
     outcome = agents.write_block(cfg.root)
     if outcome == agents.NEWER:
@@ -211,7 +229,7 @@ def sync(ctx: click.Context) -> None:
                    "`uv tool upgrade dev-charter`.")
     else:
         click.echo(f"{agents.AGENTS_FILE}: {outcome}.")
-    for note in hooks.install(cfg):
+    for note in _git_files(cfg.root) + hooks.install(cfg):
         click.echo(note)
 
 
@@ -314,6 +332,56 @@ def park(ctx: click.Context, idea: str, source: str) -> None:
     click.echo(f"Parked in {_shown(cfg, path)}. A person decides whether it becomes work.")
 
 
+@main.command(name="import")
+@click.argument("path", required=False, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--by", "person", default="", help="Who made these decisions. Defaults to your git user name.")
+@click.option("--preview", is_flag=True, help="Show what would change, and change nothing.")
+@click.pass_context
+def import_command(ctx: click.Context, path: Path | None, person: str, preview: bool) -> None:
+    """Bring in the decisions and notes made in the My decision and My note columns of LEDGER.xlsx (or a copy)."""
+    cfg = _open(ctx)
+    ledger = cfg.root / LEDGER_FILE
+    path = (path or ledger).resolve()
+    if not path.is_file():
+        raise CharterError(f"{path} not found. Run `dev-charter report` to build {LEDGER_FILE}, make your decisions "
+                           "in its yellow columns, save it, then import it.")
+    project = store.load_project(cfg)
+    if project.problems:
+        lines = "\n".join(f"  {p.where(cfg.root)}: {p.message}" for p in project.problems)
+        raise CharterError(f"Nothing was imported, so no decision lands in a file that cannot be read. Fix these "
+                           f"first:\n{lines}")
+    review = owner_review.plan(project, owner_review.read_sheet(path))
+    for item in review.skipped:
+        click.echo(f"Skipped {item}: it is no longer in {config.CHARTER_DIR}/.")
+    if review.problems:
+        lines = "\n".join(f"  {problem}" for problem in review.problems)
+        raise CharterError(f"Nothing was imported. Correct these cells in the spreadsheet, save it, and import "
+                           f"again:\n{lines}")
+    if not review.changes and not review.notes:
+        click.echo("Nothing to import: every decision already matches the charter, and there are no notes.")
+        return
+    for change in review.changes:
+        click.echo(f"  {change.entry.id} {change.entry.title}: {change.before} → {change.choice}")
+    for entry, note in review.notes:
+        click.echo(f"  {entry.id} note: {note}")
+    if preview:
+        click.echo("Preview only: nothing was changed.")
+        return
+    person = person or (git.run(cfg.root, "config", "user.name") or "").strip()
+    if not person:
+        raise CharterError('Say who made these decisions: dev-charter import --by "Your name".')
+    for changed in owner_review.apply(cfg, review, person):
+        click.echo(f"Changed {_shown(cfg, changed)}.")
+    paths, waiting = write_reports(take_snapshot(store.load_project(cfg), trace_module.collect(cfg),
+                                                 wip.collect(cfg)), replace_review=path == ledger.resolve())
+    if waiting:
+        click.echo(kept_message(waiting))
+    click.echo("Rebuilt " + " and ".join(_shown(cfg, p) for p in paths) + "; reopen it to see the result.")
+    if review.notes:
+        click.echo(f"The notes are in {config.CHARTER_DIR}/{owner_review.NOTES_FILE}: your coding agent goes through "
+                   "them with you and changes nothing until you agree.")
+
+
 @main.command(name="renumber")
 @click.argument("item_id")
 @click.option("--to", "new_id", default=None, help="The new ID. Defaults to the next one never used.")
@@ -360,7 +428,9 @@ def report(ctx: click.Context, quiet: bool) -> None:
     if project.problems:
         lines = "\n".join(f"  {p.where(cfg.root)}: {p.message}" for p in project.problems)
         raise CharterError(f"The report was not rebuilt, so it never leaves out a feature. Fix these first:\n{lines}")
-    paths = write_reports(take_snapshot(project, trace_module.collect(cfg), wip.collect(cfg)))
+    paths, waiting = write_reports(take_snapshot(project, trace_module.collect(cfg), wip.collect(cfg)))
+    if waiting:
+        click.echo(kept_message(waiting))
     if not quiet:
         click.echo("Rebuilt " + " and ".join(_shown(cfg, p) for p in paths) + ".")
 
@@ -398,6 +468,17 @@ def status(ctx: click.Context, brief: bool) -> None:
             cards = "; ".join(f"{c.id} {c.title} ({', '.join(c.serves)})" for c in work.cards)
             click.echo(f"  {work.branch.name} ({work.branch.author}, {work.when:%d %b}"
                        f"{'' if work.branch.pushed else ', not pushed'}): {cards}")
+    try:
+        waiting = owner_review.unimported(project, cfg.root / LEDGER_FILE)
+    except CharterError:
+        waiting = None
+    if waiting:
+        click.echo(f"{LEDGER_FILE} holds a review not imported yet ({waiting.summary()}): import it when the person "
+                   "asks (`dev-charter import`).")
+    notes = owner_review.open_notes(cfg)
+    if notes:
+        click.echo(f"{notes} review note{'s' if notes != 1 else ''} waiting in {config.CHARTER_DIR}/"
+                   f"{owner_review.NOTES_FILE}: go through them with the person who wrote them.")
     if hooks.missing_checks(cfg):
         click.echo("Commits in this clone are not checked yet: run `dev-charter sync`.")
     if project.problems:

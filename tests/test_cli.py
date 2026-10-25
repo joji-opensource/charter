@@ -23,7 +23,9 @@ def test_init_sets_everything_up_and_a_second_run_changes_nothing(product):
     assert not (root / "charter/handoff.md").exists()
     assert "/LEDGER.xlsx" in (root / ".gitignore").read_text()
     assert "/.dev-charter/" in (root / ".gitignore").read_text()
-    assert "charter/ideas.md merge=union" in (root / ".gitattributes").read_text()
+    assert "/~$LEDGER.xlsx" in (root / ".gitignore").read_text()
+    for name in ("ideas.md", "review-notes.md", "review-log.md"):
+        assert f"charter/{name} merge=union" in (root / ".gitattributes").read_text()
     before = snapshot(root)
     result = product.run("init", "--yes")
     assert "already there" in result.output
@@ -93,16 +95,17 @@ def test_report_builds_a_readable_spreadsheet_and_page(product):
     assert book.sheetnames == ["Summary", "Features", "Promises", "Code map", "Work in progress", "Decisions",
                                "Ideas"]
     features = book["Features"]
-    assert features["A1"].value.startswith("Generated ") and "Do not edit" in features["A1"].value
-    assert [c.value for c in features[2]][:7] == ["ID", "Title", "Area", "Priority", "Release", "Status", "Checks"]
-    assert features["A3"].value == "F-014" and features["F3"].value == "Agreed"
-    assert features["G3"].value == "1 of 3 checks passing"
-    assert [c.value for c in features[2]][7:9] == ["Built in", "Proven by"]
-    assert features["I3"].value == "1 sign-off by Joji John"
-    assert features["O3"].value.splitlines()[1].startswith("✓ b.")
+    assert features["A1"].value.startswith("Generated ") and "yellow columns are yours" in features["A1"].value
+    assert [c.value for c in features[2]][:9] == ["ID", "Title", "My decision", "My note", "Area", "Priority",
+                                                  "Release", "Status", "Checks"]
+    assert features["A3"].value == "F-014" and features["H3"].value == "Agreed"
+    assert features["I3"].value == "1 of 3 checks passing"
+    assert [c.value for c in features[2]][9:11] == ["Built in", "Proven by"]
+    assert features["K3"].value == "1 sign-off by Joji John"
+    assert features["Q3"].value.splitlines()[1].startswith("✓ b.")
     assert features.freeze_panes == "B3"
     assert features.row_dimensions[3].height > 15 * 3
-    assert features["F3"].fill.fgColor.rgb.endswith("E7E6E6")
+    assert features["H3"].fill.fgColor.rgb.endswith("E7E6E6")
     assert book["Ideas"]["B3"].value == "Show the courier on a map"
 
     page = (product.root / "status.html").read_text()

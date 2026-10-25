@@ -23,6 +23,14 @@ Run any command with `--help` for its options. Commands that change files print 
 
 Never write an ID yourself; these commands hand them out so they stay unique across branches.
 
+## The product owner's review
+
+| Command | Use it to |
+|---|---|
+| `dev-charter import` | Bring in the decisions and notes a person made in the My decision and My note columns of `LEDGER.xlsx`, only when they ask. It names every change; `--preview` shows them and changes nothing, `--by "<name>"` says who decided (default: the git user name), and a file path imports a copy, such as one downloaded from Google Sheets. |
+
+Notes arrive in `charter/review-notes.md`: go through each with its author, and delete it once it is dealt with.
+
 ## Tags in the code
 
 | Command | Use it to |
@@ -49,4 +57,4 @@ tag), `dev-charter pr-summary --base <branch>` and `dev-charter publish` (in CI)
 
 `/dev-charter:init`, `/dev-charter:feature`, `/dev-charter:plan`, `/dev-charter:review`, `/dev-charter:probe`,
 `/dev-charter:build`, `/dev-charter:verify`, `/dev-charter:ship`, `/dev-charter:status`, `/dev-charter:park`,
-`/dev-charter:strict`.
+`/dev-charter:import`, `/dev-charter:strict`.
