@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 — 2026-10-25
+
+- **`check` notices when the rules in `AGENTS.md` are out of date**, even within a minor release: it compares the
+  Dev Charter section's text with what the installed version would write, not just its version. It tells apart a
+  section from an earlier release (run `dev-charter sync`), one edited by hand inside the section (`sync` restores
+  it; put your own rules outside it), and one written by a newer Dev Charter (upgrade yours instead).
+- **`sync` never downgrades the section.** A teammate on an older release leaves a newer section alone, so teammates
+  on different releases never rewrite it back and forth. The section's marker now records the full version.
+
 ## 0.1.1 — 2026-10-25
 
 - **Code that explains itself.** Tags can carry words (`serves: F-014 — Track my order`) and can name a single check
