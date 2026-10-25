@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — 2026-10-25
+
+- **Code that explains itself.** Tags can carry words (`serves: F-014 — Track my order`) and can name a single check
+  (`serves: F-014.c — …`) above the function that delivers it. Every tag in a file now counts (0.1.0 read only the
+  first). The spreadsheet shows which file and line delivers each check, and the Code map lists every tag.
+- **Told while building.** With the plugin, Claude Code is reminded right after it edits a code file with no tag,
+  with the exact tag for the task card it is working on.
+- **`dev-charter tags`** lists every tag; **`tags --refresh`** rewrites their words to the charter's wording.
+- **`dev-charter guide commands`**: every command and when to use it, pointed to from `AGENTS.md`, so Claude Code
+  knows them all.
+- `check` refuses a tag naming a check that does not exist (`F-014.z`).
+
 ## 0.1.0 — 2026-10-25
 
 The first working release, built and tested with Claude Code.

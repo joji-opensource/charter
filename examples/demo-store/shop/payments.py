@@ -23,6 +23,7 @@ def confirm_screen(card: SavedCard, total: int) -> str:
     return f"Pay {shown(total)} with {card.label()}"
 
 
+# serves: P-002.b — a changed price is confirmed before paying
 def charge(card: SavedCard, total_shown: int, total_now: int) -> dict[str, object]:
     if total_now != total_shown:
         raise PriceChanged(f"{shown(total_shown)} became {shown(total_now)}")

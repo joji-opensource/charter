@@ -118,6 +118,11 @@ Dev Charter has three layers. You can use the first two on their own.
 3. **The Workflow: how the agent works.** Task cards that name the feature they serve, a plan → review → prove →
    build → ship loop, one list for parked ideas, and a handoff on each card.
 
+**Code that explains itself.** Claude Code tags what it writes: `# serves: F-014 — Track my order` at the top of a
+file, and `# serves: F-014.c — someone else's order asks them to sign in` above the function that delivers that
+check. Every tag counts, the spreadsheet shows which file and line delivers each check, and with the plugin Claude is
+reminded the moment it changes a file that has no tag, so old code gets explained one change at a time.
+
 `dev-charter report` combines all three into `LEDGER.xlsx` and a one-page `status.html`. They are rebuilt after every
 commit, on demand, and in CI, and never edited by hand, so they cannot drift from the truth.
 

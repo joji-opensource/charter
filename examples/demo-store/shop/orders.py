@@ -19,6 +19,7 @@ class Order:
     carrier_date: date  # the carrier's own date, never an estimate of ours (DEC-001)
 
 
+# serves: F-014.c — someone else's order asks them to sign in
 def order_status(order: Order, viewer: str | None) -> dict[str, str]:
     if viewer != order.customer:
         raise SignInRequired(order.id)
