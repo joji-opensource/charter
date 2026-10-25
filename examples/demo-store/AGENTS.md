@@ -1,8 +1,10 @@
-<!-- dev-charter:start v0.1.2 -->
+<!-- dev-charter:start v0.1.3 -->
 ## Dev Charter: how work is done in this repository
 
 This product's features, promises and decisions live in `charter/`, written in plain English for the people who own
-the product. `LEDGER.xlsx` and `status.html` are generated from them; never edit those two files.
+the product. `LEDGER.xlsx` and `status.html` are generated from them: never edit them, and never delete
+`LEDGER.xlsx`, which may hold a person's review not yet imported. People record decisions and notes in its My decision
+and My note columns; when they ask, bring those in with `dev-charter import`.
 
 - Every change serves a feature (`F-nnn`) or a promise (`P-nnn`) in `charter/`. If none fits, ask; never invent one.
 - At the start of work, run `dev-charter status --brief`. It lists the work in progress on other people's branches:
@@ -18,6 +20,8 @@ the product. `LEDGER.xlsx` and `status.html` are generated from them; never edit
   code every feature relies on). Name each test after its check (`test_F014_b_text_sent`).
 - An idea that is not the task goes to `dev-charter park "<idea>"`, never into code.
 - Before saying work is done, run `dev-charter check` and fix what it reports.
-- Never write a sign-off, never change the `state` of a feature or promise, and never commit with `--no-verify`:
-  people do those.
+- Change the `state` or `priority` of a feature or promise, or write a sign-off, only when a person explicitly asks
+  and names the items; then say exactly what you changed. Never commit with `--no-verify`.
+- Notes in `charter/review-notes.md` come from the product owner: go through them with that person, change nothing a
+  note asks for until they agree, and delete each note once it is dealt with.
 <!-- dev-charter:end -->

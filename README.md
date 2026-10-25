@@ -40,6 +40,8 @@ AI coding agents let a small team build a large product quickly. The cost shows 
   checks and the sign-offs, and every sign-off records who and when.
 - **Early warning.** A feature that used to work and now fails is flagged *At risk* the next time the
   spreadsheet is generated, before a customer finds it.
+- **Decide in the spreadsheet.** Agree, defer or cut each feature, set its priority and leave a note, right in the
+  spreadsheet; one import brings your decisions into the project, with who decided and when.
 - **Control over what gets built.** Every piece of work names the feature it serves. Ideas that don't serve an
   agreed feature are captured in one list for you to decide on later, instead of quietly becoming code.
 
@@ -124,7 +126,8 @@ check. Every tag counts, the spreadsheet shows which file and line delivers each
 reminded the moment it changes a file that has no tag, so old code gets explained one change at a time.
 
 `dev-charter report` combines all three into `LEDGER.xlsx` and a one-page `status.html`. They are rebuilt after every
-commit, on demand, and in CI, and never edited by hand, so they cannot drift from the truth.
+commit, on demand, and in CI, so they cannot drift from the truth. The only part anyone writes in is the
+spreadsheet's two yellow columns, for the product owner's decisions (below).
 
 ### Built for Claude Code
 
@@ -147,6 +150,21 @@ Code only.
 | Work in progress | The open task cards on teammates' branches, before they merge |
 | Decisions | Every decision, plain English first |
 | Ideas | Everything parked for later |
+
+### Decide in the spreadsheet
+
+The Features and Promises tabs have two yellow columns that belong to you, the product owner:
+
+- **My decision**, a dropdown. **Agree (Must)**, **Agree (Should)** or **Agree (Could)**: build it, at that
+  priority (**Agree** keeps the priority it has). **Defer**: not now. **Cut**: no longer planned; it stays on record
+  as *Retired*. **Not reviewed**: leave it as it is. Each row opens showing the current decision.
+- **My note**, anything to change, in your words: "reword check c", "merge with F-012".
+
+Save the file, then ask Claude Code to "import my review" (or run `dev-charter import`). Dev Charter applies only the
+decisions you changed, records who decided and when in `charter/review-log.md`, puts your notes in
+`charter/review-notes.md` for Claude Code to go through with you, and rebuilds the spreadsheet. Until you import, the
+rebuild after each commit leaves your copy alone. Using Google Sheets or Numbers? Save or download it as an Excel
+file and import that: `dev-charter import ~/Downloads/LEDGER.xlsx`.
 
 ## Choose how strict to be
 
@@ -219,8 +237,8 @@ So that statuses include your tests, have your test runner write JUnit XML (with
 `charter.toml`. Name each test after the check it proves: `test_F014_b_text_sent`.
 
 `/dev-charter:init` adds only your product's own content to your project: a `charter.toml` settings file, a `charter/`
-folder with your features, promises, decisions, ideas and task cards, a short marked section in `AGENTS.md`, two lines
-in `.gitignore` and `.gitattributes`, and git hooks that check each commit and refresh the spreadsheet. It never
+folder with your features, promises, decisions, ideas and task cards, a short marked section in `AGENTS.md`, a few
+lines in `.gitignore` and `.gitattributes`, and git hooks that check each commit and refresh the spreadsheet. It never
 overwrites a hook you already have. Framework code never lives in your repository; upgrading Dev Charter upgrades every project that uses
 it.
 

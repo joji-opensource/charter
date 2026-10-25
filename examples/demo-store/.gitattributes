@@ -1,2 +1,6 @@
 # Dev Charter: ideas parked on different branches merge line by line
 charter/ideas.md merge=union
+
+# Dev Charter: review notes and the review log merge line by line
+charter/review-notes.md merge=union
+charter/review-log.md merge=union

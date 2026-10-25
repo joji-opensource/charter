@@ -7,3 +7,6 @@
 
 # Dev Charter: generated views, and this clone's own settings
 /.dev-charter/
+
+# Dev Charter: the lock file Excel keeps while LEDGER.xlsx is open
+/~$LEDGER.xlsx

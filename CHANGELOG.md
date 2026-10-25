@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.3 — 2026-10-25
+
+- **Decide in the spreadsheet.** The Features and Promises tabs of `LEDGER.xlsx` have two yellow columns for the
+  product owner: **My decision**, a dropdown (Not reviewed, Agree, Agree (Must), Agree (Should), Agree (Could), Defer,
+  Cut; promises have no priority), opening on each item's current decision, and **My note**.
+- **`dev-charter import`** brings them in: it changes only the `state:` and `priority:` lines of the items you changed
+  (Agree → agreed, keeping a live item live; Defer → parked; Cut → retired), logs each decision with who and when in
+  `charter/review-log.md`, collects notes in `charter/review-notes.md`, and rebuilds the spreadsheet. It applies all
+  or nothing, finds columns by name and rows by ID (so sorting or moving columns is fine), and imports any copy, such
+  as one from Google Sheets: `dev-charter import ~/Downloads/LEDGER.xlsx`. `--preview` changes nothing.
+- **Your review is never overwritten.** While `LEDGER.xlsx` holds a decision or a note not yet imported, the rebuild
+  after each commit (and `dev-charter report`) leaves it alone and says so. `status --brief` says when a review is
+  waiting and how many review notes are open.
+- **The rule for agents changes:** Claude Code changes a state or a priority, or writes a sign-off, only when a person
+  explicitly asks and names the items, and says what it changed (before: never). `/dev-charter:import` added. Run
+  `dev-charter sync` to update `AGENTS.md`; it also adds the new lines to `.gitignore` (Excel's `~$LEDGER.xlsx`) and
+  `.gitattributes` (the two review files merge line by line).
+
 ## 0.1.2 — 2026-10-25
 
 - **`check` notices when the rules in `AGENTS.md` are out of date**, even within a minor release: it compares the
