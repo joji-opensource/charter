@@ -1,0 +1,29 @@
+[project]
+name = "dev-charter"
+version = "0.0.1"
+description = "Know what your product does, which code delivers it, and what is proven, in one spreadsheet."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Joji John" }]
+requires-python = ">=3.11"
+dependencies = ["click>=8.1,<9"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/joji-opensource/charter"
+Issues = "https://github.com/joji-opensource/charter/issues"
+
+[project.scripts]
+dev-charter = "dev_charter.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
