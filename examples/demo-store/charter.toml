@@ -4,6 +4,7 @@
 name = "Demo Store"
 mode = "standard"                # light | standard | strict
 dev-charter = ">=0.1,<0.2"       # the Dev Charter versions this project works with
+integration_branch = "dev"       # the branch work is merged into; empty means the remote's default
 
 [[repos]]
 path = "."

@@ -7,9 +7,8 @@ builds it and the tests that prove it, and turns that into a spreadsheet a found
 can read in five minutes. It is built for teams who write software with Claude Code, where code now arrives faster
 than anyone can read it.
 
-> **Status: early development.** The first working release is being built. Version 0.0.1 on PyPI only holds the
-> name and does nothing yet; the commands below describe the first working release. Follow the repository to hear
-> when it ships.
+> **Status: 0.1, the first working release.** Built and tested with Claude Code. Feedback and issues are welcome on
+> GitHub.
 
 ---
 
@@ -117,7 +116,7 @@ Dev Charter has three layers. You can use the first two on their own.
    repositories, in any language, and reads test results in JUnit XML, which pytest and most test runners write
    (Jest and Go through a small add-on).
 3. **The Workflow: how the agent works.** Task cards that name the feature they serve, a plan → review → prove →
-   build → ship loop, one list for parked ideas, and a handoff at the end of each session.
+   build → ship loop, one list for parked ideas, and a handoff on each card.
 
 `dev-charter report` combines all three into `LEDGER.xlsx` and a one-page `status.html`. They are rebuilt after every
 commit, on demand, and in CI, and never edited by hand, so they cannot drift from the truth.
@@ -139,7 +138,8 @@ Code only.
 | Summary | Features by area and status, share proven, what changed this week |
 | Features | One row per feature, the main view |
 | Promises | Product-wide rules and their status |
-| Code map | Each module and the features it serves; unexplained code flagged |
+| Code map | Each module and the features it serves, linked to the file on GitHub; unexplained code flagged |
+| Work in progress | The open task cards on teammates' branches, before they merge |
 | Decisions | Every decision, plain English first |
 | Ideas | Everything parked for later |
 
@@ -151,7 +151,29 @@ Code only.
 | **Standard** | Before each commit | Everyday work where a person reviews and commits |
 | **Strict** | At every file change: Claude Code is blocked from writing outside its task | Long unattended agent runs, several agents at once, shared core code |
 
-Switch modes with one line in `charter.toml`, or turn on Strict for a single session.
+Switch modes with one line in `charter.toml` (then `dev-charter sync`), or turn Strict on in your own clone for an
+unattended run with `/dev-charter:strict on`.
+
+## Working as a team
+
+Every feature, promise, decision and task card is its own small file, so people on different branches rarely touch
+the same one, and Dev Charter takes care of the rest:
+
+- **IDs never collide once you have fetched.** A new ID comes after every ID ever used on any branch git knows about,
+  and is never reused. If two people still pick the same one, `dev-charter renumber F-017` moves one of them, with
+  every reference to it, and the pull-request check refuses a reused ID before it reaches your main branch.
+- **No merge conflicts in the charter.** Each task card keeps its own handoff, and parked ideas merge line by line.
+- **See work before it merges.** The *Work in progress* tab, and `dev-charter status`, list the open task cards on
+  every teammate's branch, so neither people nor agents start work someone else is already doing.
+- **The product owner approves product changes.** `dev-charter init --owner @name` makes any pull request that
+  changes a feature, a promise or a decision need that person's approval (turn on GitHub's "Require review from
+  Code Owners" for your main branch).
+- **One ledger for the team.** `dev-charter ci` writes a GitHub workflow that, on each pull request, posts a
+  plain-English summary of what it changes in the product and stops it on a reused ID or untagged new code; and,
+  after each merge, runs the tests and puts the team's `LEDGER.xlsx` and `status.html` on a `ledger` branch.
+
+**Joining a team:** after cloning, run `dev-charter sync` once. It installs the commit checks in your clone (git does
+not copy them), and CI checks every pull request either way.
 
 ## Getting started
 
@@ -174,8 +196,8 @@ uv tool install dev-charter
 /dev-charter:init
 ```
 
-Claude asks five questions (product name, repositories, product areas, user roles, how strict to be) and sets
-everything up. Prefer the terminal? `dev-charter init` asks the same questions.
+Claude asks six questions (product name, areas, user roles, how strict to be, the branch work merges into, and who
+approves product changes) and sets everything up. Prefer the terminal? `dev-charter init` asks the same questions.
 
 **4. Work**
 
@@ -184,16 +206,17 @@ everything up. Prefer the terminal? `dev-charter init` asks the same questions.
 /dev-charter:status   where are we?
 ```
 
-`LEDGER.xlsx` and `status.html` are rebuilt after every commit; `dev-charter report` rebuilds them any time.
+`LEDGER.xlsx` and `status.html` are rebuilt after every commit; `dev-charter report` rebuilds them any time. For the team's view on GitHub, run
+`dev-charter ci` once and commit the workflow it writes.
 
 So that statuses include your tests, have your test runner write JUnit XML (with pytest:
 `pytest --junitxml=reports/junit.xml`) and tell Dev Charter where, with `results = ["reports/*.xml"]` in
 `charter.toml`. Name each test after the check it proves: `test_F014_b_text_sent`.
 
 `/dev-charter:init` adds only your product's own content to your project: a `charter.toml` settings file, a `charter/`
-folder with your features, promises, decisions, ideas, task cards and handoff, a short marked section in
-`AGENTS.md`, and git hooks that check each commit and refresh the spreadsheet. It never overwrites a hook you
-already have. Framework code never lives in your repository; upgrading Dev Charter upgrades every project that uses
+folder with your features, promises, decisions, ideas and task cards, a short marked section in `AGENTS.md`, two lines
+in `.gitignore` and `.gitattributes`, and git hooks that check each commit and refresh the spreadsheet. It never
+overwrites a hook you already have. Framework code never lives in your repository; upgrading Dev Charter upgrades every project that uses
 it.
 
 ## What Dev Charter is not

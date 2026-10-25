@@ -19,6 +19,19 @@ anyone else is sent to the sign-in page.
 
 - Both tests pass, and the order page shows the step and date for a real staging order on a phone.
 
+## Allowed paths
+
+- shop/orders.py
+- tests/test_orders.py
+
 ## Blockers
 
 <!-- Changes outside this card that passed the blocker test (dev-charter guide build): date · file · why -->
+
+## Handoff
+
+- Done, with evidence: the order page shows the step and the carrier's date, and sends anyone else to sign in;
+  `test_F014_a_order_shows_its_step_and_expected_date` and `test_F014_c_someone_elses_order_asks_to_sign_in` pass.
+- In progress: nothing.
+- Parked: showing the courier's location on a map (ideas.md).
+- Next step: ask Joji to watch a real staging order end to end and, if it works, sign F-014 off as proven.

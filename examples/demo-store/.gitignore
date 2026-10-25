@@ -4,3 +4,6 @@
 
 # Test results, written by the tests on each run
 /reports/
+
+# Dev Charter: generated views, and this clone's own settings
+/.dev-charter/
