@@ -18,11 +18,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-      - name: Check the release tag matches the package version
+      - name: Check the release tag matches the package and plugin versions
         run: |
           version="$(uv version --short)"
           if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
             echo "The release tag ${GITHUB_REF_NAME} does not match the package version ${version}."
+            exit 1
+          fi
+          plugin="$(uv run --no-project python -c 'import json; print(json.load(open("plugin/.claude-plugin/plugin.json"))["version"])')"
+          if [ "${plugin}" != "${version}" ]; then
+            echo "plugin.json says ${plugin}, but the package is ${version}."
             exit 1
           fi
       - run: uv build
