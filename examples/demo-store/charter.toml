@@ -1,0 +1,15 @@
+# Dev Charter settings for this product. Edit freely; `dev-charter check` validates it.
+
+[product]
+name = "Demo Store"
+mode = "standard"                # light | standard | strict
+dev-charter = ">=0.1,<0.2"       # the Dev Charter versions this project works with
+
+[[repos]]
+path = "."
+results = []                     # where this repo's tests write JUnit XML, e.g. "reports/*.xml"
+
+[words]
+roles = ["customer", "store admin", "support agent"]
+areas = ["Browsing", "Checkout", "Orders and delivery", "Accounts"]
+internal = []                    # in-house words that must not appear in plain-English text

@@ -91,10 +91,10 @@ Done means
   b. A text message is sent when the order goes out for delivery
   c. Opening someone else's order shows a sign-in page, never their order
 
-Status      Built: 2 of 3 checks passing           (calculated)
-Built in    Orders service · Notifications         (found in the code)
+Status      Built: 2 of 3 checks passing                          (calculated)
+Built in    shop-api: orders/status.py · notifications/sms.py     (found in the code)
 Proven by   7 automated checks · last real run 24 Oct
-Decisions   DEC-031 (delivery dates come from the carrier, never guessed)
+Decisions   DEC-001 (delivery dates come from the carrier, never guessed)
 ```
 
 You write the top half, or ask your agent to. Dev Charter fills in the bottom half from the code and the test results.
