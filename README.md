@@ -91,9 +91,10 @@ Done means
   b. A text message is sent when the order goes out for delivery
   c. Opening someone else's order shows a sign-in page, never their order
 
-Status      Built: 2 of 3 checks passing                          (calculated)
+Status      Built: 3 of 3 checks passing                          (calculated)
 Built in    shop-api: orders/status.py · notifications/sms.py     (found in the code)
-Proven by   7 automated checks · last real run 24 Oct
+Proven by   7 automated checks (7 passed) · results of 24 Oct 10:42
+            1 sign-off by Joji John
 Decisions   DEC-001 (delivery dates come from the carrier, never guessed)
 ```
 
@@ -184,6 +185,10 @@ everything up. Prefer the terminal? `dev-charter init` asks the same questions.
 ```
 
 `LEDGER.xlsx` and `status.html` are rebuilt after every commit; `dev-charter report` rebuilds them any time.
+
+So that statuses include your tests, have your test runner write JUnit XML (with pytest:
+`pytest --junitxml=reports/junit.xml`) and tell Dev Charter where, with `results = ["reports/*.xml"]` in
+`charter.toml`. Name each test after the check it proves: `test_F014_b_text_sent`.
 
 `/dev-charter:init` adds only your product's own content to your project: a `charter.toml` settings file, a `charter/`
 folder with your features, promises, decisions, ideas, task cards and handoff, a short marked section in

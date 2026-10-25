@@ -2,7 +2,7 @@
 id: CARD-001
 title: Order status page
 serves: ["F-014.a", "F-014.c"]
-state: open                   # open | done
+state: done                   # open | done
 ---
 
 **Goal** A signed-in customer opens an order and sees its current step and the carrier's expected delivery date;
@@ -10,9 +10,10 @@ anyone else is sent to the sign-in page.
 
 ## Plan
 
-- `orders/status.py`: new `order_status(order_id, customer)` returns the step and the carrier's date (DEC-001).
-- `orders/views.py`: the order page shows both; it refuses any order that is not the signed-in customer's.
-- `tests/test_order_status.py`: `test_F014_a_shows_step_and_date`, `test_F014_c_other_customers_order_signs_in`.
+- `shop/orders.py`: `order_status(order, viewer)` returns the step and the carrier's date (DEC-001), and refuses
+  anyone who is not the order's customer.
+- `tests/test_orders.py`: `test_F014_a_order_shows_its_step_and_expected_date`,
+  `test_F014_c_someone_elses_order_asks_to_sign_in`.
 
 ## Done when
 

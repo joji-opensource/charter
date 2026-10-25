@@ -7,7 +7,8 @@ dev-charter = ">=0.1,<0.2"       # the Dev Charter versions this project works w
 
 [[repos]]
 path = "."
-results = []                     # where this repo's tests write JUnit XML, e.g. "reports/*.xml"
+name = "demo-store"
+results = ["reports/*.xml"]      # where this repo's tests write JUnit XML, e.g. "reports/*.xml"
 
 [words]
 roles = ["customer", "store admin", "support agent"]

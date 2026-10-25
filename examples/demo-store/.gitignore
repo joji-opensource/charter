@@ -1,3 +1,6 @@
 # Dev Charter: generated views, rebuilt by `dev-charter report`
 /LEDGER.xlsx
 /status.html
+
+# Test results, written by the tests on each run
+/reports/

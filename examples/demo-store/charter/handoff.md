@@ -5,16 +5,17 @@ the history is in git.
 
 ## Last session
 
-- Date: 2026-10-24
-- Card: CARD-001
+- Date: 2026-10-25
+- Card: CARD-001 (done)
 
 ## Done, with evidence
 
-- The order page plan is agreed and on CARD-001.
+- The order page shows the step and the carrier's date, and sends anyone else to sign in:
+  `test_F014_a_order_shows_its_step_and_expected_date` and `test_F014_c_someone_elses_order_asks_to_sign_in` pass.
 
 ## In progress
 
-- `orders/status.py`: reading the carrier's date is written; showing it on the page is not started.
+- Nothing.
 
 ## Parked
 
@@ -22,4 +23,4 @@ the history is in git.
 
 ## Exact next step
 
-- Show the step and the carrier's date on the order page, then write test_F014_a_shows_step_and_date.
+- Ask Joji to watch a real staging order end to end and, if it works, sign F-014 off as proven.
