@@ -1,5 +1,6 @@
 # Copyright 2026 Joji John
 # SPDX-License-Identifier: Apache-2.0
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,32 @@ class Product:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         return path
+
+    def git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(self.root), *args], capture_output=True, text=True, check=check)
+
+    def commit(self, message: str, check: bool = True) -> None:
+        """Commit everything; check=False skips the commit check, to set up code written before Dev Charter."""
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message, *([] if check else ["--no-verify"]))
+
+    def set_results(self, pattern: str) -> None:
+        toml = self.root / "charter.toml"
+        toml.write_text(toml.read_text().replace("results = []", f'results = ["{pattern}"]'))
+
+
+@pytest.fixture
+def git_product(tmp_path: Path) -> Product:
+    """A product that is its own git repository, with a GitHub remote and Dev Charter's hooks installed."""
+    root = tmp_path / "shop"
+    root.mkdir()
+    shop = Product(root)
+    for args in (["init", "-q", "-b", "main"], ["config", "user.email", "test@example.com"],
+                 ["config", "user.name", "Test"], ["remote", "add", "origin", "git@github.com:acme/shop.git"]):
+        shop.git(*args)
+    shop.run("init", "--name", "Demo Store", "--area", "Orders and delivery", "--role", "customer", "--yes")
+    shop.commit("set up Dev Charter")
+    return shop
 
 
 @pytest.fixture

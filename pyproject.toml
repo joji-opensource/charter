@@ -42,6 +42,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+src = ["src", "examples/demo-store"]  # the demo store is its own small project
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

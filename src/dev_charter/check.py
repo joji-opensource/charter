@@ -9,9 +9,10 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__
+from . import __version__, git, hooks
 from .agents import AGENTS_FILE, block_version
 from .store import PLACEHOLDER_RE, Project
+from .trace import Trace
 
 PROBLEM, WARNING = "problem", "warning"
 MAX_WORDS = 250
@@ -34,9 +35,14 @@ class Finding:
         return f"{shown}:{self.line}" if self.line else shown
 
 
-def run(project: Project) -> list[Finding]:
+def run(project: Project, trace: Trace | None = None, changes: dict[Path, str] | None = None,
+        staged: bool = False) -> list[Finding]:
+    """All the checks. `changes` maps changed code files to 'new' or 'changed'; `staged` limits the trace checks to
+    what is about to be committed."""
     config = project.config
     findings = [Finding(PROBLEM, p.message, p.path, p.line) for p in project.problems]
+    if trace is not None:
+        findings += _trace_findings(project, trace, changes or {}, staged)
 
     files_by_id: dict[str, list[Path]] = {}
     for item in [*project.entries, *project.decisions, *project.cards]:
@@ -94,6 +100,8 @@ def run(project: Project) -> list[Finding]:
             findings.append(Finding(WARNING, f"{decision.id} still has template text.", decision.path, 1))
         findings += _internal_words(decision.id, decision.path, texts, internal)
 
+    if staged:
+        return _ordered(findings)
     written_by = block_version(config.root)
     if written_by is None:
         findings.append(Finding(WARNING, f"{AGENTS_FILE} has no Dev Charter block, so coding agents do not know the "
@@ -101,7 +109,68 @@ def run(project: Project) -> list[Finding]:
     elif written_by != __version__:
         findings.append(Finding(WARNING, f"The block in {AGENTS_FILE} was written by Dev Charter {written_by}; "
                                 f"{__version__} is installed. Run `dev-charter sync`.", config.root / AGENTS_FILE))
+    for repo in hooks.missing_checks(config):
+        findings.append(Finding(WARNING, f"Commits to {repo.path.name} are not checked. Run `dev-charter sync` to add "
+                                "the check.", repo.path))
+    return _ordered(findings)
+
+
+def _ordered(findings: list[Finding]) -> list[Finding]:
     return sorted(findings, key=lambda f: (f.level != PROBLEM, str(f.path or ""), f.line or 0))
+
+
+def _trace_findings(project: Project, trace: Trace, changes: dict[Path, str], staged: bool) -> list[Finding]:
+    config = project.config
+    known = {e.id for e in project.entries}
+    findings = []
+    untagged_level = WARNING if config.mode == "light" else PROBLEM
+    quiet_untagged = 0
+    for code in trace.files:
+        change = changes.get(code.absolute)
+        if staged and change is None:
+            continue
+        for entry_id in code.serves:
+            if entry_id not in known:
+                findings.append(Finding(PROBLEM, f"This file serves {entry_id}, which is not a feature or promise in "
+                                        "charter/.", code.absolute, code.tag.line))
+        if code.tag is not None:
+            continue
+        if change == "new":
+            findings.append(Finding(untagged_level, "This new code file does not say which feature it serves. Add a "
+                                    "`serves: F-nnn` comment near the top (or `serves: foundation` for code every "
+                                    "feature relies on).", code.absolute, 1))
+        elif change == "changed":
+            findings.append(Finding(WARNING, "This changed code file does not say which feature it serves.",
+                                    code.absolute, 1))
+        else:
+            quiet_untagged += 1
+    if staged:
+        return findings
+    if quiet_untagged:
+        findings.append(Finding(WARNING, f"{quiet_untagged} other code file(s) do not say which feature they serve; "
+                                "the Code map in LEDGER.xlsx lists them as Unexplained."))
+
+    for name in sorted({c.name for c in trace.results.cases for i in c.ids if i.split(".")[0] not in known}):
+        findings.append(Finding(WARNING, f"The test '{name}' names a feature or promise that is not in charter/."))
+    for path, reason in trace.results.unreadable:
+        findings.append(Finding(WARNING, f"These test results could not be read: {reason}.", path))
+    for repo in config.repos:
+        if not repo.results:
+            continue
+        files = [f for f in trace.results.files if f.repo == repo]
+        if not files:
+            findings.append(Finding(WARNING, f"No test results were found at {', '.join(repo.results)}; run the tests "
+                                    "so they write them there.", repo.path))
+            continue
+        last_commit = git.commit_time(repo.path)
+        newest = max(f.written for f in files).timestamp()
+        if last_commit and newest < last_commit:
+            findings.append(Finding(WARNING, f"The test results in {repo.path.name} are older than its latest commit; "
+                                    "run the tests again so statuses are current.", files[0].path))
+    if not any(repo.results for repo in config.repos):
+        findings.append(Finding(WARNING, "No test results are configured, so statuses do not include any tests. Set "
+                                "`results` in charter.toml to where your tests write JUnit XML."))
+    return findings
 
 
 def _internal_words(item_id: str, path: Path, texts: list[str], words: list[str]) -> list[Finding]:

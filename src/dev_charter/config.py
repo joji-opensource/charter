@@ -23,8 +23,11 @@ MODES = ("light", "standard", "strict")
 @dataclass(frozen=True)
 class Repo:
     path: Path  # absolute
-    name: str
-    results: tuple[str, ...] = ()
+    name: str = ""  # from charter.toml; otherwise taken from the git remote, then the folder
+    url: str = ""  # the repository's web address, for links; otherwise taken from the git remote
+    results: tuple[str, ...] = ()  # where its tests write JUnit XML, relative to the repository
+    code: tuple[str, ...] = ()  # which files count as code, when the defaults do not fit
+    tests: tuple[str, ...] = ()  # which files are tests, when the defaults do not fit
 
 
 @dataclass(frozen=True)
@@ -82,8 +85,11 @@ def load(root: Path) -> Config:
         repos.append(
             Repo(
                 path=repo_path,
-                name=str(entry.get("name") or repo_path.name),
-                results=tuple(str(r) for r in entry.get("results") or ()),
+                name=str(entry.get("name") or ""),
+                url=str(entry.get("url") or "").rstrip("/"),
+                results=_strings(entry.get("results")),
+                code=_strings(entry.get("code")),
+                tests=_strings(entry.get("tests")),
             )
         )
 
@@ -99,6 +105,12 @@ def load(root: Path) -> Config:
         internal_words=tuple(str(w) for w in words.get("internal") or ()),
         extra=data,
     )
+
+
+def _strings(value) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    return tuple(str(v) for v in value or ())
 
 
 def check_version(config: Config, installed: str = __version__) -> None:

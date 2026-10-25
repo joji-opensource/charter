@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -21,6 +22,7 @@ HEADER_FONT = Font(bold=True, color="FFFFFF")
 NOTE_FONT = Font(italic=True, color="595959")
 TITLE_FONT = Font(bold=True, size=16)
 SECTION_FONT = Font(bold=True, size=12)
+LINK_FONT = Font(color="0563C1", underline="single")
 THIN = Side(style="thin", color="D9D9D9")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 STATUS_STYLE = {
@@ -34,9 +36,20 @@ STATUS_STYLE = {
     "Parked": ("F2F2F2", "7F7F7F"),
     "Retired": ("F2F2F2", "7F7F7F"),
 }
+CODE_STYLE = {
+    "Feature code": ("FFFFFF", "000000"),
+    "Shared foundation": ("E7E6E6", "000000"),
+    "Unexplained": ("F8CBAD", "000000"),
+}
 CHECK_MARK = {PASSING: "✓", FAILING: "✗"}
 LINE_HEIGHT = 15
 MAX_ROW_HEIGHT = 409
+
+
+@dataclass
+class Column:
+    title: str
+    width: int
 
 
 def _do_not_edit(snap: Snapshot) -> str:
@@ -44,10 +57,14 @@ def _do_not_edit(snap: Snapshot) -> str:
             "then run dev-charter report.")
 
 
-def _status_cell(cell, name: str) -> None:
-    fill, font = STATUS_STYLE.get(name, ("FFFFFF", "000000"))
+def _styled(cell, style: tuple[str, str]) -> None:
+    fill, font = style
     cell.fill = PatternFill("solid", fgColor=fill)
     cell.font = Font(bold=True, color=font)
+
+
+def _status_cell(cell, name: str) -> None:
+    _styled(cell, STATUS_STYLE.get(name, ("FFFFFF", "000000")))
 
 
 def _done_means(entry: Entry, snap: Snapshot) -> str:
@@ -63,65 +80,71 @@ def _relative(snap: Snapshot, path: Path) -> str:
     return path.relative_to(snap.project.config.root).as_posix()
 
 
-def _table(ws: Worksheet, note: str, columns: list[tuple[str, int]], rows: list[list], status_col: int | None,
-           link_col: int | None = None, freeze: str = "B3") -> None:
-    """A sheet with a do-not-edit note on row 1, a header on row 2 and wrapped, sized rows below."""
-    widths = [w for _, w in columns]
-    ws.cell(row=1, column=1, value=note).font = NOTE_FONT
-    ws.row_dimensions[1].height = LINE_HEIGHT + 3
-    for col, (title, width) in enumerate(columns, start=1):
-        ws.column_dimensions[get_column_letter(col)].width = width
-        cell = ws.cell(row=2, column=col, value=title)
-        cell.font, cell.fill, cell.border = HEADER_FONT, HEADER_FILL, BORDER
-        cell.alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[2].height = LINE_HEIGHT * 2
-    for r, values in enumerate(rows, start=3):
-        lines = 1
-        for c, value in enumerate(values, start=1):
-            cell = ws.cell(row=r, column=c, value=value if value != "" else None)
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
-            cell.border = BORDER
-            lines = max(lines, _lines(str(value or ""), widths[c - 1]))
-        if status_col is not None:
-            _status_cell(ws.cell(row=r, column=status_col), str(values[status_col - 1]))
-        if link_col is not None and values[link_col - 1]:
-            cell = ws.cell(row=r, column=link_col)
-            cell.hyperlink = str(values[link_col - 1])
-            cell.font = Font(color="0563C1", underline="single")
-        ws.row_dimensions[r].height = min(MAX_ROW_HEIGHT, LINE_HEIGHT * lines + 4)
-    ws.freeze_panes = freeze
-    if rows:
-        ws.auto_filter.ref = f"A2:{get_column_letter(len(columns))}{len(rows) + 2}"
-
-
 def _lines(text: str, width: int) -> int:
     """How many lines `text` wraps to in a column of `width` characters (viewers do not size rows reliably: P2)."""
     per_line = max(1, int(width * 1.1))
     return sum(max(1, math.ceil(len(part) / per_line)) for part in text.split("\n"))
 
 
+def _table(ws: Worksheet, note: str, columns: list[Column], rows: list[list], *, styles: dict[int, dict] | None = None,
+           links: dict[int, list[str]] | None = None, freeze: str = "B3") -> None:
+    """A sheet with a do-not-edit note on row 1, a header on row 2 and wrapped, sized rows below.
+
+    `styles` colours a column's cells by their value; `links` turns a column's cells into links (one per row).
+    """
+    ws.cell(row=1, column=1, value=note).font = NOTE_FONT
+    ws.row_dimensions[1].height = LINE_HEIGHT + 3
+    for col, column in enumerate(columns, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = column.width
+        cell = ws.cell(row=2, column=col, value=column.title)
+        cell.font, cell.fill, cell.border = HEADER_FONT, HEADER_FILL, BORDER
+        cell.alignment = Alignment(wrap_text=True, vertical="center")
+    ws.row_dimensions[2].height = LINE_HEIGHT * 2
+    for index, values in enumerate(rows):
+        r = index + 3
+        lines = 1
+        for c, value in enumerate(values, start=1):
+            cell = ws.cell(row=r, column=c, value=value if value != "" else None)
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.border = BORDER
+            lines = max(lines, _lines(str(value or ""), columns[c - 1].width))
+        for col, style in (styles or {}).items():
+            _styled(ws.cell(row=r, column=col), style.get(str(values[col - 1]), ("FFFFFF", "000000")))
+        for col, targets in (links or {}).items():
+            if targets[index]:
+                cell = ws.cell(row=r, column=col)
+                cell.hyperlink = targets[index]
+                cell.font = LINK_FONT
+        ws.row_dimensions[r].height = min(MAX_ROW_HEIGHT, LINE_HEIGHT * lines + 4)
+    ws.freeze_panes = freeze
+    if rows:
+        ws.auto_filter.ref = f"A2:{get_column_letter(len(columns))}{len(rows) + 2}"
+
+
+def _section(ws: Worksheet, row: int, title: str) -> int:
+    ws.cell(row=row, column=1, value=title).font = SECTION_FONT
+    return row + 1
+
+
 def _summary(ws: Worksheet, snap: Snapshot) -> None:
-    project = snap.project
+    project, trace = snap.project, snap.trace
     ws.column_dimensions["A"].width = 30
     for col in range(2, len(ORDER) + 3):
-        ws.column_dimensions[get_column_letter(col)].width = 12
+        ws.column_dimensions[get_column_letter(col)].width = 13
     ws.cell(row=1, column=1, value=_do_not_edit(snap)).font = NOTE_FONT
     ws.cell(row=3, column=1, value=project.config.product).font = TITLE_FONT
     ws.row_dimensions[3].height = 24
 
     done, active = snap.proven_share()
-    row = 5
-    ws.cell(row=row, column=1, value="Features proven or live").font = SECTION_FONT
-    ws.cell(row=row, column=2, value=f"{done} of {active}" if active else "none agreed yet")
-    row += 2
+    row = _section(ws, 5, "Features proven or live")
+    ws.cell(row=row - 1, column=2, value=f"{done} of {active}" if active else "none agreed yet")
+    row += 1
 
     for heading, entries, by_area in (("Features by area", project.features, True),
                                       ("Promises", project.promises, False)):
-        ws.cell(row=row, column=1, value=heading).font = SECTION_FONT
-        row += 1
+        row = _section(ws, row, heading)
         shown = [name for name in ORDER if snap.counts(entries).get(name)]
-        header = ["Area" if by_area else "", *shown, "Total"]
-        for col, title in enumerate(header, start=1):
+        for col, title in enumerate(["Area" if by_area else "", *shown, "Total"], start=1):
             cell = ws.cell(row=row, column=col, value=title)
             cell.font, cell.fill = HEADER_FONT, HEADER_FILL
             cell.alignment = Alignment(wrap_text=True, horizontal="center" if col > 1 else "left")
@@ -150,10 +173,35 @@ def _summary(ws: Worksheet, snap: Snapshot) -> None:
             row += 1
         row += 1
 
-    ws.cell(row=row, column=1, value="Changed in the last 7 days").font = SECTION_FONT
+    row = _section(ws, row, "Code")
+    kinds = {kind: sum(1 for f in trace.files if f.kind == kind) for kind in CODE_STYLE}
+    total = len(trace.files)
+    for kind, count in kinds.items():
+        ws.cell(row=row, column=1, value=kind)
+        cell = ws.cell(row=row, column=2, value=count)
+        cell.alignment = Alignment(horizontal="center")
+        if kind != "Feature code" and count:
+            _styled(cell, CODE_STYLE[kind])
+        if total:
+            ws.cell(row=row, column=3, value=f"{round(100 * count / total)}% of {total} files")
+        row += 1
     row += 1
+
+    row = _section(ws, row, "Test results")
+    for results in trace.results.files:
+        repo_name = next((r.name for r in trace.repos if r.repo == results.repo), results.repo.path.name)
+        ws.cell(row=row, column=1, value=f"{repo_name}: {results.path.name}")
+        ws.cell(row=row, column=2, value=f"{results.written:%d %b %Y %H:%M}")
+        row += 1
+    if not trace.results.files:
+        ws.cell(row=row, column=1, value="None found: statuses do not include any tests yet. Set `results` in "
+                                          "charter.toml to where your tests write JUnit XML.").font = NOTE_FONT
+        row += 1
+    row += 1
+
+    row = _section(ws, row, "Changed in the last 7 days")
     by_id = {e.id: e for e in project.entries}
-    for entry_id in snap.recent or []:
+    for entry_id in snap.recent:
         entry = by_id[entry_id]
         ws.cell(row=row, column=1, value=f"{entry.id} · {entry.title}")
         _status_cell(ws.cell(row=row, column=2, value=snap.of(entry).name), snap.of(entry).name)
@@ -161,17 +209,37 @@ def _summary(ws: Worksheet, snap: Snapshot) -> None:
     if not snap.recent:
         ws.cell(row=row, column=1, value="Nothing").font = NOTE_FONT
         row += 1
+    row += 1
 
-    row += 1
+    row = _section(ws, row, "Open task cards")
     open_cards = [c for c in project.cards if c.state == "open"]
-    ws.cell(row=row, column=1, value="Open task cards").font = SECTION_FONT
-    row += 1
     for card in open_cards:
         ws.cell(row=row, column=1, value=f"{card.id} · {card.title}")
         ws.cell(row=row, column=2, value=", ".join(card.serves))
         row += 1
     if not open_cards:
         ws.cell(row=row, column=1, value="None").font = NOTE_FONT
+
+
+def _code_map(ws: Worksheet, snap: Snapshot) -> None:
+    titles = {e.id: e.title for e in snap.project.entries}
+    files = sorted(snap.trace.files, key=lambda f: (f.repo.name, f.path))
+    rows = [
+        [f.repo.name, f.path, f.kind,
+         "\n".join(f"{i} · {titles.get(i, 'not in the charter')}" for i in f.serves)]
+        for f in files
+    ]
+    links = [f.link for f in files]
+    commits = sorted({f"{r.name} at {r.commit[:7]}" for r in snap.trace.repos if r.commit})
+    unpushed = sorted(r.name for r in snap.trace.repos if r.commit and not r.pushed)
+    note = _do_not_edit(snap)
+    if commits:
+        note += f" File links open {', '.join(commits)}."
+    if unpushed:
+        note += f" Not pushed yet, so no links: {', '.join(unpushed)}."
+    _table(ws, note, [Column("Repository", 18), Column("File", 52), Column("What it is", 18),
+                      Column("Serves", 46)], rows,
+           styles={3: CODE_STYLE}, links={2: links}, freeze="C3")
 
 
 def write_xlsx(snap: Snapshot, path: Path) -> None:
@@ -183,45 +251,45 @@ def write_xlsx(snap: Snapshot, path: Path) -> None:
     summary.title = "Summary"
     _summary(summary, snap)
 
-    features = wb.create_sheet("Features")
-    feature_rows = [
-        [f.id, f.title, f.area, f.priority, f.release, snap.of(f).name, snap.of(f).checks,
-         f.story.get("As a", ""), f.story.get("I want to", ""), f.story.get("With", ""),
+    features = sorted(project.features, key=lambda e: e.id)
+    _table(wb.create_sheet("Features"), note, [
+        Column("ID", 8), Column("Title", 22), Column("Area", 16), Column("Priority", 9), Column("Release", 12),
+        Column("Status", 12), Column("Checks", 14), Column("Built in", 34), Column("Proven by", 30), Column("As a", 16),
+        Column("I want to", 28), Column("With", 32), Column("Must also", 24), Column("So that", 28),
+        Column("Done means", 44), Column("Sign-offs", 50), Column("Decisions", 24), Column("File", 30),
+    ], [
+        [f.id, f.title, f.area, f.priority, f.release, snap.of(f).name, snap.of(f).checks, snap.built_in(f),
+         snap.proven_by(f), f.story.get("As a", ""), f.story.get("I want to", ""), f.story.get("With", ""),
          f.story.get("Must also", ""), f.story.get("So that", ""), _done_means(f, snap), _signoffs(f),
          "\n".join(f"{d} · {titles.get(d, 'not found')}" for d in f.decisions), _relative(snap, f.path)]
-        for f in sorted(project.features, key=lambda e: e.id)
-    ]
-    _table(features, note, [
-        ("ID", 8), ("Title", 22), ("Area", 16), ("Priority", 9), ("Release", 12), ("Status", 12), ("Checks", 14),
-        ("As a", 16), ("I want to", 28), ("With", 32), ("Must also", 24), ("So that", 28), ("Done means", 44),
-        ("Sign-offs", 50), ("Decisions", 24), ("File", 30),
-    ], feature_rows, status_col=6, link_col=16)
+        for f in features
+    ], styles={6: STATUS_STYLE}, links={18: [_relative(snap, f.path) for f in features]})
 
-    promises = wb.create_sheet("Promises")
-    promise_rows = [
-        [p.id, p.title, snap.of(p).name, snap.of(p).checks, p.story.get("We promise", ""),
-         p.story.get("Applies to", ""), _done_means(p, snap), _signoffs(p), _relative(snap, p.path)]
-        for p in sorted(project.promises, key=lambda e: e.id)
-    ]
-    _table(promises, note, [
-        ("ID", 8), ("Title", 24), ("Status", 12), ("Checks", 14), ("We promise", 40), ("Applies to", 28),
-        ("Done means", 44), ("Sign-offs", 50), ("File", 30),
-    ], promise_rows, status_col=3, link_col=9)
+    promises = sorted(project.promises, key=lambda e: e.id)
+    _table(wb.create_sheet("Promises"), note, [
+        Column("ID", 8), Column("Title", 24), Column("Status", 12), Column("Checks", 14), Column("Built in", 34),
+        Column("Proven by", 30), Column("We promise", 40), Column("Applies to", 28), Column("Done means", 44),
+        Column("Sign-offs", 50), Column("File", 30),
+    ], [
+        [p.id, p.title, snap.of(p).name, snap.of(p).checks, snap.built_in(p), snap.proven_by(p),
+         p.story.get("We promise", ""), p.story.get("Applies to", ""), _done_means(p, snap), _signoffs(p),
+         _relative(snap, p.path)]
+        for p in promises
+    ], styles={3: STATUS_STYLE}, links={11: [_relative(snap, p.path) for p in promises]})
 
-    decisions = wb.create_sheet("Decisions")
-    decision_rows = [
+    _code_map(wb.create_sheet("Code map"), snap)
+
+    decisions = sorted(project.decisions, key=lambda d: d.id)
+    _table(wb.create_sheet("Decisions"), note, [
+        Column("ID", 9), Column("Date", 12), Column("Title", 26), Column("Decision", 40), Column("Instead of", 30),
+        Column("Because", 40), Column("Decided by", 16), Column("Features", 16), Column("File", 30),
+    ], [
         [d.id, f"{d.on:%d %b %Y}" if d.on else "", d.title, d.decision, d.instead_of, d.because, d.decided_by,
          ", ".join(d.features), _relative(snap, d.path)]
-        for d in sorted(project.decisions, key=lambda d: d.id)
-    ]
-    _table(decisions, note, [
-        ("ID", 9), ("Date", 12), ("Title", 26), ("Decision", 40), ("Instead of", 30), ("Because", 40),
-        ("Decided by", 16), ("Features", 16), ("File", 30),
-    ], decision_rows, status_col=None, link_col=9)
+        for d in decisions
+    ], links={9: [_relative(snap, d.path) for d in decisions]})
 
-    ideas = wb.create_sheet("Ideas")
-    idea_rows = [[f"{i.on:%d %b %Y}" if i.on else "", i.text, i.source] for i in project.ideas]
-    _table(ideas, note, [("Date", 12), ("Idea", 70), ("From", 30)], idea_rows, status_col=None, freeze="A3")
+    _table(wb.create_sheet("Ideas"), note, [Column("Date", 12), Column("Idea", 70), Column("From", 30)],
+           [[f"{i.on:%d %b %Y}" if i.on else "", i.text, i.source] for i in project.ideas], freeze="A3")
 
     wb.save(path)
-

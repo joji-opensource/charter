@@ -5,17 +5,18 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Set
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from .. import git
 from ..errors import CharterError
 from ..model import Entry
 from ..status import ORDER, Status, status
 from ..store import Project
+from ..trace import Trace
 
 LEDGER_FILE = "LEDGER.xlsx"
 STATUS_FILE = "status.html"
@@ -26,6 +27,7 @@ NOT_STARTED = ("Idea", "Parked", "Retired")
 @dataclass
 class Snapshot:
     project: Project
+    trace: Trace
     statuses: dict[str, Status]
     generated: datetime
     commit: str | None = None
@@ -41,7 +43,7 @@ class Snapshot:
         if self.commit is None:
             source = "files that are not in git"
         else:
-            source = f"commit {self.commit}" + (" with uncommitted changes" if self.uncommitted else "")
+            source = f"commit {self.commit[:7]}" + (" with uncommitted changes" if self.uncommitted else "")
         return f"Generated {when} from {source}."
 
     def counts(self, entries: list[Entry]) -> dict[str, int]:
@@ -56,30 +58,41 @@ class Snapshot:
         done = [f for f in active if self.of(f).name in ("Proven", "Live")]
         return len(done), len(active)
 
+    def built_in(self, entry: Entry) -> str:
+        """The repositories and files that serve an entry, one line per repository."""
+        by_repo: dict[str, list[str]] = {}
+        for code in self.trace.built_in(entry.id):
+            by_repo.setdefault(code.repo.name, []).append(code.path)
+        return "\n".join(f"{name}: {' · '.join(sorted(paths))}" for name, paths in by_repo.items())
 
-def _git(root: Path, *args: str) -> str | None:
-    try:
-        result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return result.stdout if result.returncode == 0 else None
+    def proven_by(self, entry: Entry) -> str:
+        tests = self.trace.tests_for(entry.id)
+        lines = []
+        if tests:
+            passed = sum(1 for t in tests if t.outcome == "passed")
+            failed = sum(1 for t in tests if t.outcome == "failed")
+            counts = f"{passed} passed" + (f", {failed} failed" if failed else "")
+            newest = max(f.written for f in self.trace.results.files if f.path in {t.source for t in tests})
+            lines.append(f"{len(tests)} automated checks ({counts}) · results of {newest:%d %b %H:%M}")
+        if entry.signoffs:
+            people = sorted({s.person for s in entry.signoffs})
+            lines.append(f"{len(entry.signoffs)} sign-off{'s' if len(entry.signoffs) > 1 else ''} by "
+                         f"{', '.join(people)}")
+        return "\n".join(lines)
 
 
-def take_snapshot(
-    project: Project,
-    outcomes: Mapping[str, list[str]] | None = None,
-    tagged: Set[str] = frozenset(),
-) -> Snapshot:
+def take_snapshot(project: Project, trace: Trace | None = None) -> Snapshot:
     root = project.config.root
-    statuses = {entry.id: status(entry, outcomes, tagged) for entry in project.entries}
-    snap = Snapshot(project, statuses, datetime.now())
-    # Untracked files are listed one by one; otherwise git folds a new folder into a single line.
-    pending = _git(root, "status", "--porcelain", "--untracked-files=all", "--", "charter") or ""
-    head = _git(root, "rev-parse", "--short", "HEAD")
-    if head:
-        snap.commit = head.strip()
-        snap.uncommitted = bool(pending.strip())
-    changed = (_git(root, "log", "--since=7.days", "--name-only", "--format=", "--", "charter") or "") + pending
+    trace = trace or Trace()
+    statuses = {entry.id: status(entry, trace.outcomes, trace.tagged) for entry in project.entries}
+    snap = Snapshot(project, trace, statuses, datetime.now())
+    snap.commit = git.head(root)
+    if snap.commit:
+        # Untracked files are listed one by one; otherwise git folds a new folder into a single line.
+        snap.uncommitted = bool((git.run(root, "status", "--porcelain", "--untracked-files=all", "--", ".")
+                                 or "").strip())
+    pending = git.run(root, "status", "--porcelain", "--untracked-files=all", "--", "charter") or ""
+    changed = (git.run(root, "log", "--since=7.days", "--name-only", "--format=", "--", "charter") or "") + pending
     names = {Path(line.strip().split()[-1]).name for line in changed.splitlines() if line.strip()}
     snap.recent = sorted(e.id for e in project.entries if e.path.name in names)
     return snap

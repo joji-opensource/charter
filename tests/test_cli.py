@@ -67,7 +67,8 @@ def test_check_reports_problems_with_file_and_line_and_fails(product):
     assert result.exit_code == 1
     assert "F-014 refers to decision DEC-001, which does not exist." in result.output
     product.write("charter/decisions/DEC-001-dates-from-the-carrier.md", DECISION_001)
-    assert "All clear." in product.run("check").output
+    result = product.run("check")
+    assert "0 problem(s) to fix" in result.output
 
 
 def test_check_warns_about_in_house_words(product):
@@ -86,13 +87,15 @@ def test_report_builds_a_readable_spreadsheet_and_page(product):
     assert "Rebuilt LEDGER.xlsx and status.html." in product.run("report").output
 
     book = load_workbook(product.root / "LEDGER.xlsx")
-    assert book.sheetnames == ["Summary", "Features", "Promises", "Decisions", "Ideas"]
+    assert book.sheetnames == ["Summary", "Features", "Promises", "Code map", "Decisions", "Ideas"]
     features = book["Features"]
     assert features["A1"].value.startswith("Generated ") and "Do not edit" in features["A1"].value
     assert [c.value for c in features[2]][:7] == ["ID", "Title", "Area", "Priority", "Release", "Status", "Checks"]
     assert features["A3"].value == "F-014" and features["F3"].value == "Agreed"
     assert features["G3"].value == "1 of 3 checks passing"
-    assert features["M3"].value.splitlines()[1].startswith("✓ b.")
+    assert [c.value for c in features[2]][7:9] == ["Built in", "Proven by"]
+    assert features["I3"].value == "1 sign-off by Joji John"
+    assert features["O3"].value.splitlines()[1].startswith("✓ b.")
     assert features.freeze_panes == "B3"
     assert features.row_dimensions[3].height > 15 * 3
     assert features["F3"].fill.fgColor.rgb.endswith("E7E6E6")

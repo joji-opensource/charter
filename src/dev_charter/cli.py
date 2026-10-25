@@ -11,7 +11,8 @@ from pathlib import Path
 
 import click
 
-from . import __version__, agents, check, config, guides, store
+from . import __version__, agents, check, config, git, guides, hooks, store
+from . import trace as trace_module
 from .errors import CharterError
 from .model import CARD, DECISION, FEATURE, PRIORITIES, PROMISE, Kind
 from .report import GENERATED, take_snapshot, write_reports
@@ -118,6 +119,7 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, yes) -> None:
         done.append(f"{outcome} the Dev Charter section of {agents.AGENTS_FILE}")
     if _ignore_generated(root):
         done.append("added LEDGER.xlsx and status.html to .gitignore")
+    done += hooks.install(config.load(root))
 
     click.echo(f"Dev Charter is set up in {root}.")
     for line in done:
@@ -145,10 +147,13 @@ def _ignore_generated(root: Path) -> bool:
 @main.command()
 @click.pass_context
 def sync(ctx: click.Context) -> None:
-    """Refresh the Dev Charter section of AGENTS.md after upgrading Dev Charter."""
+    """Refresh what Dev Charter manages (the AGENTS.md section and the git hooks) after an upgrade or a change of
+    mode."""
     cfg = _open(ctx)
     outcome = agents.write_block(cfg.root)
     click.echo(f"{agents.AGENTS_FILE}: {outcome}.")
+    for note in hooks.install(cfg):
+        click.echo(note)
 
 
 # --- adding to the charter -------------------------------------------------------------------------------------------
@@ -273,7 +278,7 @@ def report(ctx: click.Context, quiet: bool) -> None:
     if project.problems:
         lines = "\n".join(f"  {p.where(cfg.root)}: {p.message}" for p in project.problems)
         raise CharterError(f"The report was not rebuilt, so it never leaves out a feature. Fix these first:\n{lines}")
-    paths = write_reports(take_snapshot(project))
+    paths = write_reports(take_snapshot(project, trace_module.collect(cfg)))
     if not quiet:
         click.echo("Rebuilt " + " and ".join(_shown(cfg, p) for p in paths) + ".")
 
@@ -285,7 +290,7 @@ def status(ctx: click.Context, brief: bool) -> None:
     """Where the product stands."""
     cfg = _open(ctx)
     project = store.load_project(cfg)
-    snap = take_snapshot(project)
+    snap = take_snapshot(project, trace_module.collect(cfg))
     click.echo(f"{cfg.product} · mode {cfg.mode} · Dev Charter {__version__}")
     for label, entries in (("Features", project.features), ("Promises", project.promises)):
         counts = snap.counts(entries)
@@ -329,11 +334,22 @@ def _next_step(cfg: config.Config) -> str:
 
 
 @main.command(name="check")
+@click.option("--staged", is_flag=True, help="Check only what is about to be committed in this repository (used by the "
+              "commit check).")
 @click.pass_context
-def check_command(ctx: click.Context) -> None:
-    """Check the charter files: problems to fix, and warnings worth a look."""
+def check_command(ctx: click.Context, staged: bool) -> None:
+    """Check the charter and the code: problems to fix, and warnings worth a look."""
     cfg = _open(ctx)
-    findings = check.run(store.load_project(cfg))
+    repos = cfg.repos
+    if staged:
+        here = git.toplevel(Path.cwd())
+        repos = tuple(r for r in cfg.repos if r.path.resolve() == here)
+        if not repos:
+            click.echo(f"{Path.cwd()} is not one of the repositories in {config.CONFIG_FILE}; this commit was not "
+                       "checked.")
+            return
+    changes = {repo.path / rel: kind for repo in repos for rel, kind in git.changes(repo.path, staged).items()}
+    findings = check.run(store.load_project(cfg), trace_module.collect(cfg), changes, staged=staged)
     problems = [f for f in findings if f.level == check.PROBLEM]
     for finding in findings:
         where = finding.where(cfg.root)
@@ -345,4 +361,6 @@ def check_command(ctx: click.Context) -> None:
     else:
         click.echo(f"\n{len(problems)} problem(s) to fix, {warnings} warning(s).")
     if problems:
+        if staged:
+            click.echo("The commit was stopped. Fix the problems above, then commit again.")
         ctx.exit(1)
