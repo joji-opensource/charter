@@ -5,7 +5,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from openpyxl import load_workbook
 
-from dev_charter import guides
+from dev_charter import __version__, guides
 from dev_charter.cli import main
 
 from .conftest import DECISION_001, FEATURE_F014, Product
@@ -142,6 +142,14 @@ def test_every_guide_is_packaged_and_listed():
         assert text.startswith("# ") and len(text) > 500
     unknown = runner.invoke(main, ["guide", "deploy"])
     assert unknown.exit_code == 1 and "no guide called 'deploy'" in unknown.output
+
+
+def test_check_notices_rules_that_changed_within_a_minor_release(product):
+    agents_md = product.root / "AGENTS.md"
+    agents_md.write_text(agents_md.read_text().replace(f"v{__version__} -->", "v0.1 -->", 1))
+    assert "its rules have changed since" in product.run("check").output
+    product.run("sync")
+    assert "Dev Charter section" not in product.run("check").output
 
 
 def test_sync_refreshes_the_agents_block(product):

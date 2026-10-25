@@ -9,8 +9,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import git, hooks
-from .agents import AGENTS_FILE, block_version, minor
+from . import __version__, git, hooks
+from .agents import AGENTS_FILE, EDITED, MISSING, NEWER, OLDER, block_state
 from .store import LEGACY_HANDOFF_FILE, PLACEHOLDER_RE, Project
 from .trace import Trace
 
@@ -102,13 +102,22 @@ def run(project: Project, trace: Trace | None = None, changes: dict[Path, str] |
 
     if staged:
         return _ordered(findings)
-    written_by = block_version(config.root)
-    if written_by is None:
-        findings.append(Finding(WARNING, f"{AGENTS_FILE} has no Dev Charter block, so coding agents do not know the "
-                                "rules. Run `dev-charter sync`.", config.root / AGENTS_FILE))
-    elif written_by != minor():
-        findings.append(Finding(WARNING, f"The block in {AGENTS_FILE} was written by Dev Charter {written_by}; "
-                                f"{minor()} is installed. Run `dev-charter sync`.", config.root / AGENTS_FILE))
+    state, written_by = block_state(config.root)
+    agents_file = config.root / AGENTS_FILE
+    if state == MISSING:
+        findings.append(Finding(WARNING, f"{AGENTS_FILE} has no Dev Charter section, so coding agents do not know the "
+                                "rules. Run `dev-charter sync`.", agents_file))
+    elif state == OLDER:
+        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was written by Dev Charter "
+                                f"{written_by} and its rules have changed since; {__version__} is installed. Run "
+                                "`dev-charter sync`.", agents_file))
+    elif state == EDITED:
+        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was edited by hand; `dev-charter "
+                                "sync` restores it. Put your own rules outside the section.", agents_file))
+    elif state == NEWER:
+        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was written by Dev Charter "
+                                f"{written_by}, newer than yours ({__version__}). Upgrade with `uv tool upgrade "
+                                "dev-charter`.", agents_file))
     legacy = config.charter_dir / LEGACY_HANDOFF_FILE
     if legacy.exists():
         findings.append(Finding(WARNING, f"charter/{LEGACY_HANDOFF_FILE} is no longer used: each task card keeps its "

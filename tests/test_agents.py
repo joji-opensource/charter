@@ -2,20 +2,38 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from dev_charter import agents
+from dev_charter import __version__, agents
 from dev_charter.errors import CharterError
 
 
 def test_the_block_is_created_when_there_is_no_agents_file(tmp_path):
     assert agents.write_block(tmp_path) == "created"
     text = (tmp_path / "AGENTS.md").read_text()
-    assert text.startswith(f"<!-- dev-charter:start v{agents.minor()} -->")
+    assert text.startswith(f"<!-- dev-charter:start v{__version__} -->")
     assert "dev-charter guide <stage>" in text
-    assert agents.block_version(tmp_path) == agents.minor()
+    assert agents.block_state(tmp_path) == (agents.CURRENT, __version__)
 
 
-def test_the_marker_carries_the_minor_version_only():
-    assert agents.minor("0.1.2") == agents.minor("0.1.7") == "0.1"
+def test_a_section_from_an_earlier_release_is_out_of_date(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("<!-- dev-charter:start v0.1 -->\nold rules\n<!-- dev-charter:end -->\n")
+    assert agents.block_state(tmp_path, "0.1.2") == (agents.OLDER, "0.1")
+    assert agents.write_block(tmp_path, "0.1.2") == "updated"
+    assert agents.block_state(tmp_path, "0.1.2") == (agents.CURRENT, "0.1.2")
+
+
+def test_a_hand_edit_inside_the_section_is_noticed(tmp_path):
+    agents.write_block(tmp_path, "0.1.2")
+    path = tmp_path / "AGENTS.md"
+    path.write_text(path.read_text().replace("Never write an ID yourself.", "IDs are fine."))
+    assert agents.block_state(tmp_path, "0.1.2")[0] == agents.EDITED
+
+
+def test_an_older_release_never_rewrites_a_newer_section(tmp_path):
+    agents.write_block(tmp_path, "0.1.3")
+    before = (tmp_path / "AGENTS.md").read_text()
+    assert agents.block_state(tmp_path, "0.1.2") == (agents.NEWER, "0.1.3")
+    assert agents.write_block(tmp_path, "0.1.2") == agents.NEWER
+    assert (tmp_path / "AGENTS.md").read_text() == before
 
 
 def test_text_outside_the_block_is_never_touched(tmp_path):

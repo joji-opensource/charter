@@ -137,7 +137,10 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, integration_branch
         done.append(f"created {config.CHARTER_DIR}/{store.IDEAS_FILE}")
 
     outcome = agents.write_block(root)
-    if outcome != "unchanged":
+    if outcome == agents.NEWER:
+        done.append(f"left the Dev Charter section of {agents.AGENTS_FILE} as it is: a newer Dev Charter wrote it "
+                    "(upgrade with `uv tool upgrade dev-charter`)")
+    elif outcome != "unchanged":
         done.append(f"{outcome} the Dev Charter section of {agents.AGENTS_FILE}")
     if _add_lines(root / ".gitignore", [f"/{name}" for name in GENERATED] + [f"/{strict.LOCAL_DIR}/"],
                   "# Dev Charter: generated views, and this clone's own settings"):
@@ -203,7 +206,11 @@ def sync(ctx: click.Context) -> None:
     mode."""
     cfg = _open(ctx)
     outcome = agents.write_block(cfg.root)
-    click.echo(f"{agents.AGENTS_FILE}: {outcome}.")
+    if outcome == agents.NEWER:
+        click.echo(f"{agents.AGENTS_FILE}: left as it is; a newer Dev Charter wrote its section. Upgrade with "
+                   "`uv tool upgrade dev-charter`.")
+    else:
+        click.echo(f"{agents.AGENTS_FILE}: {outcome}.")
     for note in hooks.install(cfg):
         click.echo(note)
 
