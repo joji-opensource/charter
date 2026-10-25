@@ -1,13 +1,18 @@
 [project]
 name = "dev-charter"
-version = "0.0.1"
+version = "0.1.0.dev0"
 description = "Know what your product does, which code delivers it, and what is proven, in one spreadsheet."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Joji John" }]
 requires-python = ">=3.11"
-dependencies = ["click>=8.1,<9"]
+dependencies = [
+    "click>=8.1,<9",
+    "openpyxl>=3.1,<4",
+    "packaging>=24",
+    "pyyaml>=6.0,<7",
+]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Environment :: Console",
@@ -24,6 +29,19 @@ Issues = "https://github.com/joji-opensource/charter/issues"
 [project.scripts]
 dev-charter = "dev_charter.cli:main"
 
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
