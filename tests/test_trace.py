@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from dev_charter import git
 from dev_charter.config import Repo
 from dev_charter.results import ids_in
-from dev_charter.scan import is_code, is_test, read_tag
+from dev_charter.scan import is_code, is_test, read_tags
 
 from .conftest import FEATURE_F014, Product
 
@@ -17,17 +17,27 @@ DECISION = FEATURE_F014.replace("decisions: [DEC-001]", "decisions: []")
 
 
 @pytest.mark.parametrize(
-    ("text", "ids", "foundation", "line"),
+    ("text", "refs", "ids", "foundation", "line", "words"),
     [
-        ('"""Order status."""\n# serves: F-014\n', ("F-014",), False, 2),
-        ("// serves: F-014, P-002\n", ("F-014", "P-002"), False, 1),
-        ("# serves: F-014.a\n", ("F-014",), False, 1),
-        ("# serves: foundation\n", (), True, 1),
+        ('"""Order status."""\n# serves: F-014\n', ("F-014",), ("F-014",), False, 2, ""),
+        ("// serves: F-014, P-002\n", ("F-014", "P-002"), ("F-014", "P-002"), False, 1, ""),
+        ("# serves: F-014.a\n", ("F-014.a",), ("F-014",), False, 1, ""),
+        ("# serves: foundation\n", (), (), True, 1, ""),
+        ("# serves: F-014 — Track my order\n", ("F-014",), ("F-014",), False, 1, "Track my order"),
+        ("/* serves: F-014.c - someone else's order asks to sign in */\n", ("F-014.c",), ("F-014",), False, 1,
+         "someone else's order asks to sign in"),
     ],
 )
-def test_a_tag_names_what_the_file_serves(text, ids, foundation, line):
-    tag = read_tag(text)
-    assert (tag.ids, tag.foundation, tag.line) == (ids, foundation, line)
+def test_a_tag_names_what_the_code_serves(text, refs, ids, foundation, line, words):
+    (tag,) = read_tags(text)
+    assert (tag.refs, tag.ids, tag.foundation, tag.line, tag.words) == (refs, ids, foundation, line, words)
+
+
+def test_every_tag_in_a_file_counts():
+    text = ("# serves: F-014 — Track my order\n\n\ndef status():\n    pass\n\n\n"
+            "# serves: F-017.a — gift wrap at checkout\ndef wrap():\n    pass\n")
+    tags = read_tags(text)
+    assert [(t.refs, t.line) for t in tags] == [(("F-014",), 1), (("F-017.a",), 8)]
 
 
 @pytest.mark.parametrize(
@@ -39,7 +49,7 @@ def test_a_tag_names_what_the_file_serves(text, ids, foundation, line):
     ],
 )
 def test_prose_and_look_alikes_are_not_tags(text):
-    assert read_tag(text) is None
+    assert read_tags(text) == ()
 
 
 @pytest.mark.parametrize(
@@ -152,5 +162,5 @@ def test_an_unknown_feature_in_a_tag_is_a_problem(git_product: Product):
     git_product.write("shop/orders/status.py", "# serves: F-099\n")
     result = git_product.run("check", ok=False)
     assert result.exit_code == 1
-    assert "serves F-099, which is not a feature or promise" in result.output
+    assert "serves F-099, but F-099 is not a feature or promise" in result.output
     assert "shop/orders/status.py:1" in result.output

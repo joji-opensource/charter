@@ -10,9 +10,9 @@ from pathlib import Path
 
 from .config import CHARTER_DIR, Config, find_root, load
 from .errors import CharterError
-from .model import CARD, FEATURE, PROMISE
+from .model import FEATURE, PROMISE
 from .scan import matches
-from .store import read_card
+from .store import open_cards
 
 LOCAL_DIR = ".dev-charter"  # this clone's own settings; never committed
 STRICT_FILE = "strict"
@@ -60,18 +60,6 @@ def _proposed(tool: str, given: dict, current: str) -> str:
     return text
 
 
-def _open_cards(config: Config) -> list:
-    cards = []
-    for path in sorted((config.charter_dir / CARD.folder).glob("*.md")):
-        try:
-            card = read_card(path)
-        except CharterError:
-            continue
-        if card.state == "open":
-            cards.append(card)
-    return cards
-
-
 def decide(payload: dict, cwd: Path) -> str | None:
     """Why this edit is refused, or None when it may go ahead. Anything Dev Charter does not manage goes ahead."""
     given = payload.get("tool_input") or {}
@@ -106,7 +94,7 @@ def decide(payload: dict, cwd: Path) -> str | None:
     if relative.startswith(charter) or relative.startswith(f"{LOCAL_DIR}/"):
         return None
 
-    cards = _open_cards(config)
+    cards = open_cards(config)
     if any(matches(relative, card.allowed) for card in cards if card.allowed):
         return None
     if not cards:

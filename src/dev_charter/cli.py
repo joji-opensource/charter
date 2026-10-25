@@ -13,7 +13,23 @@ from pathlib import Path
 
 import click
 
-from . import __version__, agents, check, ci, config, git, guides, hooks, pr, publish, renumber, store, strict, wip
+from . import (
+    __version__,
+    agents,
+    check,
+    ci,
+    config,
+    git,
+    guides,
+    hooks,
+    pr,
+    publish,
+    remind,
+    renumber,
+    store,
+    strict,
+    wip,
+)
 from . import trace as trace_module
 from .errors import CharterError
 from .model import CARD, DECISION, FEATURE, PRIORITIES, PROMISE, Kind
@@ -454,6 +470,42 @@ def guard() -> None:
     if reason:
         click.echo(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                       "permissionDecisionReason": reason}}))
+
+
+@main.command(hidden=True, name="remind")
+def remind_command() -> None:
+    """Claude Code's PostToolUse hook: after an edit, say so when the code file does not say which feature it serves."""
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+        message = remind.note(payload, Path.cwd())
+    except Exception as exc:  # a broken reminder must never stop someone's work
+        click.echo(f"Dev Charter's reminder could not run ({exc}).", err=True)
+        return
+    if message:
+        click.echo(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}}))
+
+
+@main.command(name="tags")
+@click.option("--refresh", is_flag=True, help="Rewrite the words in each tag to the charter's current wording.")
+@click.pass_context
+def tags_command(ctx: click.Context, refresh: bool) -> None:
+    """List every `serves:` tag in the code; with --refresh, bring their words in line with the charter."""
+    cfg = _open(ctx)
+    files = trace_module.collect(cfg).files
+    if refresh:
+        changed = remind.refresh(cfg, store.load_project(cfg), files)
+        for path, line, text in changed:
+            click.echo(f"  {_shown(cfg, path)}:{line}  {text}")
+        click.echo(f"Refreshed {len(changed)} tag(s).")
+        return
+    count = 0
+    for code in sorted(files, key=lambda f: (f.repo.name, f.path)):
+        for tag in code.tags:
+            count += 1
+            what = ", ".join(tag.refs) or "foundation"
+            click.echo(f"{code.repo.name}: {code.path}:{tag.line}  {what}" + (f" — {tag.words}" if tag.words else ""))
+    untagged = sum(1 for f in files if not f.tags)
+    click.echo(f"{count} tag(s); {untagged} code file(s) with none.")
 
 
 @main.command(name="pr-summary")

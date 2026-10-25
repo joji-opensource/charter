@@ -30,6 +30,10 @@ class Trace:
     def built_in(self, entry_id: str) -> list[CodeFile]:
         return [f for f in self.files if entry_id in f.serves]
 
+    def code_for(self, check_id: str) -> list[tuple[CodeFile, int]]:
+        """The files and lines tagged with one check, such as F-014.c."""
+        return [(f, tag.line) for f in self.files for tag in f.tags if check_id in tag.refs]
+
     def tests_for(self, entry_id: str) -> list[TestCase]:
         return self.results.for_entry(entry_id)
 

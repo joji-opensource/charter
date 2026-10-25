@@ -373,6 +373,19 @@ def read_card(path: Path, text: str | None = None) -> Card:
     )
 
 
+def open_cards(config: Config) -> list[Card]:
+    """The open task cards on this branch, skipping any that cannot be read."""
+    cards = []
+    for path in sorted((config.charter_dir / CARD.folder).glob("*.md")):
+        try:
+            card = read_card(path)
+        except FileProblem:
+            continue
+        if card.state == "open":
+            cards.append(card)
+    return cards
+
+
 def read_ideas(path: Path) -> list[Idea]:
     ideas = []
     if not path.is_file():

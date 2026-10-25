@@ -20,6 +20,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev-charter >/dev/null 2>&1 && dev-charter remind; exit 0"
+          }
+        ]
+      }
     ]
   }
 }

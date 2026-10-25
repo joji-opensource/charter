@@ -13,6 +13,7 @@ STAGES = {
     "build": "build only what the task card serves, reversibly",
     "verify": "prove the work on a real run",
     "ship": "hand off, and prepare the commit",
+    "commands": "every dev-charter command, and when to use it",
 }
 
 

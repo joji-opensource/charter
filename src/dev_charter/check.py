@@ -126,7 +126,7 @@ def _ordered(findings: list[Finding]) -> list[Finding]:
 
 def _trace_findings(project: Project, trace: Trace, changes: dict[Path, str], staged: bool) -> list[Finding]:
     config = project.config
-    known = {e.id for e in project.entries}
+    entries = {e.id: e for e in project.entries}
     findings = []
     untagged_level = WARNING if config.mode == "light" else PROBLEM
     quiet_untagged = 0
@@ -134,19 +134,25 @@ def _trace_findings(project: Project, trace: Trace, changes: dict[Path, str], st
         change = changes.get(code.absolute)
         if staged and change is None:
             continue
-        for entry_id in code.serves:
-            if entry_id not in known:
-                findings.append(Finding(PROBLEM, f"This file serves {entry_id}, which is not a feature or promise in "
-                                        "charter/.", code.absolute, code.tag.line))
-        if code.tag is not None:
+        for tag in code.tags:
+            for ref in tag.refs:
+                entry_id, _, letter = ref.partition(".")
+                entry = entries.get(entry_id)
+                if entry is None:
+                    findings.append(Finding(PROBLEM, f"This code says it serves {ref}, but {entry_id} is not a feature "
+                                            "or promise in charter/.", code.absolute, tag.line))
+                elif letter and letter not in {c.letter for c in entry.criteria}:
+                    findings.append(Finding(PROBLEM, f"This code says it serves {ref}, but {entry_id} has no check "
+                                            f"'{letter}.' under Done means.", code.absolute, tag.line))
+        if code.tags:
             continue
         if change == "new":
             findings.append(Finding(untagged_level, "This new code file does not say which feature it serves. Add a "
-                                    "`serves: F-nnn` comment near the top (or `serves: foundation` for code every "
-                                    "feature relies on).", code.absolute, 1))
+                                    "`serves: F-nnn — <what it is>` comment near the top (or `serves: foundation` for "
+                                    "code every feature relies on).", code.absolute, 1))
         elif change == "changed":
-            findings.append(Finding(WARNING, "This changed code file does not say which feature it serves.",
-                                    code.absolute, 1))
+            findings.append(Finding(WARNING, "This changed code file does not say which feature it serves. Add a "
+                                    "`serves:` comment for the feature this change is for.", code.absolute, 1))
         else:
             quiet_untagged += 1
     if staged:
@@ -155,7 +161,7 @@ def _trace_findings(project: Project, trace: Trace, changes: dict[Path, str], st
         findings.append(Finding(WARNING, f"{quiet_untagged} other code file(s) do not say which feature they serve; "
                                 "the Code map in LEDGER.xlsx lists them as Unexplained."))
 
-    for name in sorted({c.name for c in trace.results.cases for i in c.ids if i.split(".")[0] not in known}):
+    for name in sorted({c.name for c in trace.results.cases for i in c.ids if i.split(".")[0] not in entries}):
         findings.append(Finding(WARNING, f"The test '{name}' names a feature or promise that is not in charter/."))
     for path, reason in trace.results.unreadable:
         findings.append(Finding(WARNING, f"These test results could not be read: {reason}.", path))

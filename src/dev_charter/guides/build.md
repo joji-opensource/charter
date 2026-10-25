@@ -24,8 +24,12 @@ mode, and make it. If it is large, or touches code other work depends on, stop a
 
 ## Leave a trail
 
-- Put `serves: F-nnn` (or `P-nnn`) in a comment near the top of every new code file. Code that every feature relies
-  on says `serves: foundation`.
+- Tag what you write. At the top of every new code file: `serves: F-014 — Track my order` (several features:
+  `serves: F-014, P-001`). Above each function or block that delivers one check: `serves: F-014.c — <the check, in a
+  few words>`, so a reader sees why the code exists and the spreadsheet shows which code delivers each check. Code
+  that every feature relies on says `serves: foundation`.
+- When you change an existing file that has no tag, add one for the feature your card serves. Old code gets explained
+  one change at a time. (With the plugin, Claude Code is reminded right after the edit.)
 - Name every test after the check it proves: `test_F014_b_text_sent_when_out_for_delivery`.
 - Write code that reads like the code around it: its naming, its comments, its habits. Comments say what and why,
   never "changed on" or "was X, now Y".

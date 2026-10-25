@@ -68,8 +68,14 @@ def _status_cell(cell, name: str) -> None:
 
 
 def _done_means(entry: Entry, snap: Snapshot) -> str:
+    """Each check with its mark, and the code tagged with that check, if any (file:line)."""
     states = snap.of(entry).criteria
-    return "\n".join(f"{CHECK_MARK.get(states.get(c.letter, ''), '○')} {c.letter}. {c.text}" for c in entry.criteria)
+    lines = []
+    for c in entry.criteria:
+        places = ", ".join(f"{f.path}:{line}" for f, line in snap.trace.code_for(entry.criterion_id(c.letter)))
+        lines.append(f"{CHECK_MARK.get(states.get(c.letter, ''), '○')} {c.letter}. {c.text}"
+                     + (f" — {places}" if places else ""))
+    return "\n".join(lines)
 
 
 def _signoffs(entry: Entry) -> str:
@@ -233,14 +239,27 @@ def _summary(ws: Worksheet, snap: Snapshot) -> None:
                                                           else "")).font = NOTE_FONT
 
 
+def _tag_line(snap: Snapshot, tag) -> str:
+    """One tag as a person reads it: what it serves, in the charter's words, and where."""
+    entries = {e.id: e for e in snap.project.entries}
+    names = []
+    for ref in tag.refs:
+        entry_id, _, letter = ref.partition(".")
+        entry = entries.get(entry_id)
+        if entry is None:
+            names.append(f"{ref} · not in the charter")
+        elif letter:
+            text = next((c.text for c in entry.criteria if c.letter == letter), "no such check")
+            names.append(f"{ref} · {text}")
+        else:
+            names.append(f"{ref} · {entry.title}")
+    return "; ".join(names) + f" (line {tag.line})"
+
+
 def _code_map(ws: Worksheet, snap: Snapshot) -> None:
-    titles = {e.id: e.title for e in snap.project.entries}
     files = sorted(snap.trace.files, key=lambda f: (f.repo.name, f.path))
-    rows = [
-        [f.repo.name, f.path, f.kind,
-         "\n".join(f"{i} · {titles.get(i, 'not in the charter')}" for i in f.serves)]
-        for f in files
-    ]
+    rows = [[f.repo.name, f.path, f.kind, "\n".join(_tag_line(snap, tag) for tag in f.tags if tag.refs)]
+            for f in files]
     links = [f.link for f in files]
     commits = sorted({f"{r.name} at {r.commit[:7]}" for r in snap.trace.repos if r.commit})
     unpushed = sorted(r.name for r in snap.trace.repos if r.commit and not r.pushed)
