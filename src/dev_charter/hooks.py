@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import git
 from .config import Config, Repo
+from .errors import REFUSED
 
 MARKER = "# dev-charter hook"
 PRE_COMMIT, POST_COMMIT = "pre-commit", "post-commit"
@@ -78,31 +79,43 @@ def install(config: Config) -> list[str]:
         if folder is None:
             notes.append(f"{where}: git did not say where its hooks live, so no commit checks were installed.")
             continue
-        folder.mkdir(parents=True, exist_ok=True)
-        root_from_repo = os.path.relpath(config.root, repo.path)
-        uses_framework = (repo.path / ".pre-commit-config.yaml").exists()
-        for kind in (PRE_COMMIT, POST_COMMIT):
-            path = folder / kind
-            ours = path.is_file() and MARKER in path.read_text(encoding="utf-8", errors="replace")
-            if kind not in wanted(config):
-                if ours:
-                    path.unlink()
-                    notes.append(f"{where}: removed the {kind} check ({config.mode} mode checks in CI only).")
-                continue
-            if kind == PRE_COMMIT and uses_framework and not ours:
-                notes.append(f"{where} uses the pre-commit framework: add a local hook that runs "
-                             f"`{_manual_line(kind, root_from_repo)}`.")
-                continue
-            if path.exists() and not ours:
-                notes.append(f"{where} already has a {kind} hook, left as it is: add the line "
-                             f"`{_manual_line(kind, root_from_repo)}` to {path}.")
-                continue
-            text = script(kind, root_from_repo)
-            if ours and path.read_text(encoding="utf-8") == text:
-                continue
-            path.write_text(text, encoding="utf-8")
-            path.chmod(0o755)
-            notes.append(f"{where}: {'refreshed' if ours else 'installed'} the {kind} hook.")
+        try:
+            notes += _install_in(config, repo, where, folder)
+        except OSError as exc:
+            if exc.errno not in REFUSED:
+                raise
+            notes.append(f"{where}: could not write its commit checks in {folder} ({exc.strerror}). A coding agent's "
+                         "sandbox keeps it out of .git (Codex's does): run `dev-charter sync` yourself in a terminal.")
+    return notes
+
+
+def _install_in(config: Config, repo: Repo, where: str, folder: Path) -> list[str]:
+    notes = []
+    folder.mkdir(parents=True, exist_ok=True)
+    root_from_repo = os.path.relpath(config.root, repo.path)
+    uses_framework = (repo.path / ".pre-commit-config.yaml").exists()
+    for kind in (PRE_COMMIT, POST_COMMIT):
+        path = folder / kind
+        ours = path.is_file() and MARKER in path.read_text(encoding="utf-8", errors="replace")
+        if kind not in wanted(config):
+            if ours:
+                path.unlink()
+                notes.append(f"{where}: removed the {kind} check ({config.mode} mode checks in CI only).")
+            continue
+        if kind == PRE_COMMIT and uses_framework and not ours:
+            notes.append(f"{where} uses the pre-commit framework: add a local hook that runs "
+                         f"`{_manual_line(kind, root_from_repo)}`.")
+            continue
+        if path.exists() and not ours:
+            notes.append(f"{where} already has a {kind} hook, left as it is: add the line "
+                         f"`{_manual_line(kind, root_from_repo)}` to {path}.")
+            continue
+        text = script(kind, root_from_repo)
+        if ours and path.read_text(encoding="utf-8") == text:
+            continue
+        path.write_text(text, encoding="utf-8")
+        path.chmod(0o755)
+        notes.append(f"{where}: {'refreshed' if ours else 'installed'} the {kind} hook.")
     return notes
 
 

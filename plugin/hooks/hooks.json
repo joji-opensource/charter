@@ -5,14 +5,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v dev-charter >/dev/null 2>&1 && dev-charter status --brief 2>/dev/null; exit 0"
+            "command": "if command -v dev-charter >/dev/null 2>&1; then dev-charter status --brief --session-start 2>/dev/null; [ $? -eq 2 ] && echo 'The dev-charter command is older than its plugin: run uv tool upgrade dev-charter.' && dev-charter status --brief 2>/dev/null; else echo 'The Dev Charter plugin is installed, but the dev-charter command is not: uv tool install dev-charter'; fi; exit 0"
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|apply_patch|Bash",
         "hooks": [
           {
             "type": "command",
@@ -23,7 +23,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write|MultiEdit|apply_patch",
         "hooks": [
           {
             "type": "command",

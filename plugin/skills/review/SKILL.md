@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review the plan twice, problems first, before probing or building.
-allowed-tools: Bash(dev-charter guide:*)
+allowed-tools: Bash(dev-charter guide:*), Bash(dev-charter card turn:*)
 ---
 
 Run `dev-charter guide review` and follow it exactly.

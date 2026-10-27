@@ -39,6 +39,18 @@ Fix the plan after the first pass, then walk the list again from the top. The se
 smaller problems. If it still finds a structural one (a missing part, a wrong boundary, a contract that cannot
 hold), fix it and go again. Stop when what remains is no longer structural.
 
+## When another agent reviews
+
+A second coding agent can review without starting from the first one's conclusions. Take turns, one at a time:
+
+- The first agent records its turn (`dev-charter card turn CARD-nnn --did "planned"`) and stops changing files. The
+  person starts the other agent in its own terminal and asks it to review the card.
+- If the card already holds a review pass by another agent, write your pass from the plan and the code before you
+  read theirs. Then read theirs, and say where you agree and where you differ.
+- Record your turn when your pass is written. A review made without changing files is recorded by whoever writes it
+  into the card: `--did "review pass 2, by <the reviewer>"`.
+- The first agent goes on only after the second has recorded its turn.
+
 ## What to hand over
 
 The problems, each with its fix; the updated plan; and the load-bearing assumptions for `dev-charter guide probe`.

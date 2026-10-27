@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +18,7 @@ from .errors import CharterError
 
 CONFIG_FILE = "charter.toml"
 CHARTER_DIR = "charter"
+LOCAL_DIR = ".dev-charter"  # this clone's own settings and notes; never committed
 MODES = ("light", "standard", "strict")
 
 
@@ -115,22 +117,57 @@ def _strings(value) -> tuple[str, ...]:
     return tuple(str(v) for v in value or ())
 
 
-def check_version(config: Config, installed: str = __version__) -> None:
-    """Refuse to run when this project was set up for a different Dev Charter."""
-    if not config.versions:
-        return
+def _spec(config: Config) -> SpecifierSet:
     try:
-        spec = SpecifierSet(config.versions)
+        return SpecifierSet(config.versions)
     except InvalidSpecifier as exc:
         raise CharterError(
             f"{CONFIG_FILE}: dev-charter = \"{config.versions}\" is not a version range Dev Charter understands."
         ) from exc
-    if Version(Version(installed).base_version) not in spec:
+
+
+def pin_is_behind(config: Config, installed: str = __version__) -> bool:
+    """Whether the project's range stops below the installed Dev Charter, so moving it is an upgrade, never a step
+    back."""
+    version = Version(Version(installed).base_version)
+    if not config.versions or version in _spec(config):
+        return False
+    for single in _spec(config):
+        if version in SpecifierSet(str(single)):
+            continue
+        if single.operator in (">", ">=") or version < Version(single.version.rstrip(".*")):
+            return False
+    return True
+
+
+def check_version(config: Config, installed: str = __version__) -> None:
+    """Refuse to run when this project was set up for a different Dev Charter."""
+    if not config.versions or Version(Version(installed).base_version) in _spec(config):
+        return
+    if pin_is_behind(config, installed):
         raise CharterError(
-            f"This project uses Dev Charter {config.versions}, and Dev Charter {installed} is installed. "
-            f"Install a matching version with `uv tool install \"dev-charter{config.versions}\"`, "
-            f"or change the range in {CONFIG_FILE}."
+            f"This project uses Dev Charter {config.versions}, and Dev Charter {installed} is installed. Run "
+            f"`dev-charter sync --upgrade` to move it to {version_range(installed)}, or install a matching version "
+            f"with `uv tool install \"dev-charter{config.versions}\"`."
         )
+    raise CharterError(
+        f"This project uses Dev Charter {config.versions}, newer than the {installed} installed. Install a matching "
+        f"version with `uv tool install \"dev-charter{config.versions}\"`."
+    )
+
+
+PIN_RE = re.compile(r'^(?P<head>dev-charter\s*=\s*)"[^"]*"', re.MULTILINE)
+
+
+def write_pin(root: Path, versions: str) -> bool:
+    """Set the Dev Charter versions this project works with, changing only that line of charter.toml."""
+    path = root / CONFIG_FILE
+    text = path.read_text(encoding="utf-8")
+    new_text = PIN_RE.sub(lambda m: f'{m["head"]}"{versions}"', text, count=1)
+    if new_text == text:
+        return False
+    path.write_text(new_text, encoding="utf-8")
+    return True
 
 
 def _toml_list(values: list[str]) -> str:

@@ -1,0 +1,18 @@
+{
+  "name": "dev-charter",
+  "version": "0.1.3",
+  "description": "Dev Charter's commands and guardrails for Claude Code and Codex. Needs the dev-charter command: uv tool install dev-charter",
+  "author": {
+    "name": "Joji John"
+  },
+  "homepage": "https://github.com/joji-opensource/charter",
+  "repository": "https://github.com/joji-opensource/charter",
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Dev Charter",
+    "shortDescription": "Features in plain English, traced to the code that builds them and the tests that prove them",
+    "category": "Developer Tools"
+  }
+}

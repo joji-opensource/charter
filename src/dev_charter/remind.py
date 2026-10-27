@@ -1,6 +1,6 @@
 # Copyright 2026 Joji John
 # SPDX-License-Identifier: Apache-2.0
-"""Telling Claude Code, right after it edits a code file, when that file does not say which feature it serves,
+"""Telling the coding agent, right after it edits a code file, when that file does not say which feature it serves,
 and keeping the words in tags in step with the charter on request."""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from . import edits
 from .config import Config, find_root, load
 from .errors import CharterError
 from .scan import TAG_REF_RE, is_code, read_tags
@@ -35,12 +36,18 @@ def _words(entries: dict, ref: str) -> str:
 
 
 def note(payload: dict, cwd: Path) -> str | None:
-    """What to tell Claude after an edit, or None when the file is tagged or not a code file Dev Charter tracks."""
-    raw = (payload.get("tool_input") or {}).get("file_path")
-    if not raw:
+    """What to tell the agent after an edit, or None when every file it wrote is tagged or not code Dev Charter
+    tracks. A Codex patch can write several files; each untagged one gets its own sentence."""
+    try:
+        found = edits.changes(payload, cwd)
+    except edits.UnreadableEdit:
         return None
-    path = Path(raw)
-    path = (path if path.is_absolute() else Path(payload.get("cwd") or cwd) / path).resolve()
+    said = [message for change in found if change.op != "delete" and (message := _note_for(change.to or change.path))]
+    return "\n\n".join(said) or None
+
+
+def _note_for(path: Path) -> str | None:
+    path = path.resolve()
     try:
         config = load(find_root(path.parent))
     except CharterError:

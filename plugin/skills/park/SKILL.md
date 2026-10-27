@@ -5,5 +5,5 @@ argument-hint: the idea
 allowed-tools: Bash(dev-charter park:*)
 ---
 
-Run `dev-charter park "$ARGUMENTS"` (add `--from "<card, feature or person>"` when you know where it came
-from). Confirm in one line that it is parked and that a person decides whether it becomes work.
+Take the idea from what the person asked (in Claude Code it is here: $ARGUMENTS) and run `dev-charter park "<the
+idea>"`, adding `--from "<card, feature or person>"` when you know where it came from. Confirm in one line that it is parked and that a person decides whether it becomes work.

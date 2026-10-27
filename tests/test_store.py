@@ -91,3 +91,10 @@ def test_ideas_are_parked_with_their_date_and_source(product):
     ideas = store.read_ideas(cfg.charter_dir / store.IDEAS_FILE)
     assert [(i.text, i.source) for i in ideas] == [("Show the courier - on a map", "F-014")]
     assert ideas[0].on is not None
+
+
+def test_a_detail_written_twice_is_a_problem(tmp_path):
+    path = tmp_path / "F-014-track-my-order.md"
+    path.write_text(FEATURE_F014.replace("state: agreed\n", 'state: agreed\n"state": live\n'))
+    with pytest.raises(FileProblem, match="'state' is written twice"):
+        store.read_entry(path, FEATURE)

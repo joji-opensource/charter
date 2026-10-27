@@ -1,7 +1,7 @@
 ---
 name: ship
 description: Hand off on the task card, and prepare the commit.
-allowed-tools: Bash(dev-charter guide:*), Bash(dev-charter check:*), Bash(dev-charter report:*)
+allowed-tools: Bash(dev-charter guide:*), Bash(dev-charter check:*), Bash(dev-charter report:*), Bash(dev-charter card turn:*)
 ---
 
 Run `dev-charter guide ship` and follow it exactly.

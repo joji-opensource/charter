@@ -19,6 +19,7 @@ Run any command with `--help` for its options. Commands that change files print 
 | `dev-charter promise new "<title>"` | Create a promise: a rule the whole product keeps. |
 | `dev-charter decision new "<title>"` | Record a decision (`--feature F-014` for each feature it concerns). |
 | `dev-charter card new "<title>"` | Create a task card (`--serves F-014.a` for each check it serves). |
+| `dev-charter card turn CARD-nnn --did "<what you did>"` | Record a turn on a card when you hand it on or stop: the date, who (the agent, from its hook; or you) and what the turn did. |
 | `dev-charter park "<idea>"` | Write down an idea that is not the task (`--from` where it came from), instead of building it. |
 
 Never write an ID yourself; these commands hand them out so they stay unique across branches.
@@ -43,18 +44,20 @@ Notes arrive in `charter/review-notes.md`: go through each with its author, and 
 
 | Command | Use it to |
 |---|---|
-| `dev-charter init` | Set up Dev Charter in a product (a person usually runs `/dev-charter:init`). Safe to run again. |
-| `dev-charter sync` | Refresh this repository's `AGENTS.md` section and git hooks after an upgrade, a change of mode, or a fresh clone. |
-| `dev-charter strict on` / `off` | Turn Strict mode on in this clone for an unattended run (`--hours`). Only a person should turn it off. |
+| `dev-charter init` | Set up Dev Charter in a product (a person usually asks for the plugin's `init` skill). Safe to run again. |
+| `dev-charter sync` | Refresh the `AGENTS.md` section, the pointers to it in child repositories, and the git hooks after an upgrade, a change of mode, or a fresh clone. An agent's sandbox may not let it write git hooks; then the person runs it. |
+| `dev-charter strict on` / `off` | Turn Strict mode on in this clone for an unattended run (`--hours`). Only a person turns it off, from their own terminal: the guard refuses `strict off` from an agent. |
 | `dev-charter ci` | Write the GitHub workflow that checks each pull request and keeps the team's ledger on the `ledger` branch. |
 
 ## Run by hooks and CI, not by hand
 
-`dev-charter guard` (Strict mode, before each edit), `dev-charter remind` (after each edit, when a code file has no
-tag), `dev-charter pr-summary --base <branch>` and `dev-charter publish` (in CI).
+`dev-charter guard` (before each edit and shell command: Strict mode, and a note that lets `status` tell whether the
+guardrails are running), `dev-charter remind` (after each edit, when a code file has no tag), `dev-charter pr-summary
+--base <branch>` and `dev-charter publish` (in CI).
 
-## In Claude Code, with the plugin
+## In Claude Code and Codex, with the plugin
 
-`/dev-charter:init`, `/dev-charter:feature`, `/dev-charter:plan`, `/dev-charter:review`, `/dev-charter:probe`,
-`/dev-charter:build`, `/dev-charter:verify`, `/dev-charter:ship`, `/dev-charter:status`, `/dev-charter:park`,
-`/dev-charter:import`, `/dev-charter:strict`.
+The plugin's skills are `init`, `feature`, `plan`, `review`, `probe`, `build`, `verify`, `ship`, `status`, `park`,
+`import` and `strict`. In Claude Code, call one as `/dev-charter:plan`; in Codex, as `$dev-charter:plan`, or choose it
+from `/skills`. Codex runs the plugin's hooks only once the person trusts them in `/hooks`, and again after each update
+that changes them; until then `dev-charter status --brief` says the guardrails are not running.

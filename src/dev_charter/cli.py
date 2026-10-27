@@ -22,17 +22,18 @@ from . import (
     git,
     guides,
     hooks,
+    notes,
     owner_review,
     pr,
     publish,
     remind,
     renumber,
     store,
-    strict,
     wip,
 )
+from . import guard as guard_module
 from . import trace as trace_module
-from .errors import CharterError
+from .errors import REFUSED, CharterError, refused_write
 from .model import CARD, DECISION, FEATURE, PRIORITIES, PROMISE, Kind
 from .report import GENERATED, LEDGER_FILE, kept_message, take_snapshot, write_reports
 from .status import ORDER
@@ -41,13 +42,22 @@ ID_REF_RE = re.compile(r"^[FP]-\d{3,}(\.[a-z])?$")
 
 
 class Command(click.Group):
-    """Shows a CharterError as one plain line instead of a traceback."""
+    """Shows a CharterError, or a write the system refused, in plain words instead of a traceback."""
 
     def invoke(self, ctx: click.Context):
         try:
             return super().invoke(ctx)
         except CharterError as exc:
             raise click.ClickException(str(exc)) from exc
+        except OSError as exc:
+            if exc.errno not in REFUSED or not exc.filename:
+                raise
+            try:
+                root = config.find_root((ctx.obj or {}).get("start") or Path.cwd())
+            except CharterError:
+                root = None
+            said = refused_write(Path(exc.filename), exc.strerror or str(exc), root, notes.run_by_an_agent())
+            raise click.ClickException(said) from exc
 
 
 def _open(ctx: click.Context) -> config.Config:
@@ -143,10 +153,12 @@ def init(ctx: click.Context, name, mode, repos, areas, roles, integration_branch
                     "(upgrade with `uv tool upgrade dev-charter`)")
     elif outcome != "unchanged":
         done.append(f"{outcome} the Dev Charter section of {agents.AGENTS_FILE}")
+    cfg = config.load(root)
+    done += agents.write_pointers(cfg)
     done += _git_files(root)
     if owner:
         done.append(_codeowners(root, owner))
-    done += hooks.install(config.load(root))
+    done += hooks.install(cfg)
 
     click.echo(f"Dev Charter is set up in {root}.")
     for line in done:
@@ -158,7 +170,7 @@ def _git_files(root: Path) -> list[str]:
     """Keep the generated files out of git, and let the files every branch adds to merge line by line."""
     done = []
     ignored = (
-        ([f"/{name}" for name in GENERATED] + [f"/{strict.LOCAL_DIR}/"],
+        ([f"/{name}" for name in GENERATED] + [f"/{config.LOCAL_DIR}/"],
          "# Dev Charter: generated views, and this clone's own settings"),
         ([f"/~${LEDGER_FILE}"], f"# Dev Charter: the lock file Excel keeps while {LEDGER_FILE} is open"),
     )
@@ -218,19 +230,37 @@ def ci_command(ctx: click.Context) -> None:
 
 
 @main.command()
+@click.option("--upgrade", is_flag=True, help="Move this project to the installed Dev Charter's versions as well.")
 @click.pass_context
-def sync(ctx: click.Context) -> None:
-    """Refresh what Dev Charter manages (the AGENTS.md section, the git hooks, and its lines in .gitignore and
-    .gitattributes) after an upgrade or a change of mode."""
-    cfg = _open(ctx)
+def sync(ctx: click.Context, upgrade: bool) -> None:
+    """Refresh what Dev Charter manages (the AGENTS.md section and its pointers, the git hooks, and its lines in
+    .gitignore and .gitattributes) after an upgrade or a change of mode. With --upgrade, also move the project to the
+    installed Dev Charter's versions: the pin in charter.toml, changed last so that running it again finishes the job,
+    and the install line of the workflow `dev-charter ci` wrote."""
+    if not upgrade:
+        cfg = _open(ctx)
+    else:
+        cfg = config.load(config.find_root(ctx.obj["start"]))
+        if not config.pin_is_behind(cfg):
+            config.check_version(cfg)  # a project that needs a newer Dev Charter is never moved back
     outcome = agents.write_block(cfg.root)
     if outcome == agents.NEWER:
         click.echo(f"{agents.AGENTS_FILE}: left as it is; a newer Dev Charter wrote its section. Upgrade with "
                    "`uv tool upgrade dev-charter`.")
     else:
         click.echo(f"{agents.AGENTS_FILE}: {outcome}.")
-    for note in _git_files(cfg.root) + hooks.install(cfg):
+    for note in agents.write_pointers(cfg) + _git_files(cfg.root) + hooks.install(cfg):
         click.echo(note)
+    if not upgrade:
+        return
+    versions = config.version_range()
+    if note := ci.upgrade_install(cfg, versions):
+        click.echo(note)
+    if cfg.versions and config.write_pin(cfg.root, versions):
+        click.echo(f"{config.CONFIG_FILE}: this project now works with Dev Charter {versions} "
+                   f"(it said {cfg.versions}).")
+    click.echo("Then update the Dev Charter plugin in each coding agent: in Claude Code, from /plugin; in Codex, run "
+               "`codex plugin marketplace upgrade`, then trust its changed hooks in /hooks.")
 
 
 # --- adding to the charter -------------------------------------------------------------------------------------------
@@ -313,6 +343,25 @@ def card_new(ctx: click.Context, title: str, serves: tuple[str, ...]) -> None:
     _check_refs(serves)
     new_id, path = store.create(cfg, CARD, title, {"serves": json.dumps(list(serves))})
     _created(cfg, CARD, new_id, path)
+
+
+@card.command("turn")
+@click.argument("card_id")
+@click.option("--did", required=True, help="What this turn did, in a few words, such as 'review pass 2'.")
+@click.pass_context
+def card_turn(ctx: click.Context, card_id: str, did: str) -> None:
+    """Record a turn on a card: which agent (or person) did which stage, when, so the card shows who did what when
+    agents take turns."""
+    cfg = _open(ctx)
+    path = store.card_file(cfg, card_id)
+    did = " ".join(did.replace("·", "-").split())
+    if not did:
+        raise CharterError("Say what the turn did, such as --did \"review pass 2\".")
+    person = (git.run(cfg.root, "config", "user.name") or "").strip()
+    agent = notes.who(cfg.root, ("card", "turn", card_id), person)
+    line = f"- {time.strftime('%Y-%m-%d %H:%M')} · {agent} · {did}"
+    store.add_turn(path, line)
+    click.echo(f"Recorded on {card_id}: {line[2:]}")
 
 
 def _check_refs(refs: tuple[str, ...]) -> None:
@@ -437,15 +486,23 @@ def report(ctx: click.Context, quiet: bool) -> None:
 
 @main.command()
 @click.option("--brief", is_flag=True, help="A few lines, for the start of a working session.")
+@click.option("--session-start", is_flag=True, hidden=True, help="Run by the plugin as an agent's session starts.")
 @click.pass_context
-def status(ctx: click.Context, brief: bool) -> None:
+def status(ctx: click.Context, brief: bool, session_start: bool) -> None:
     """Where the product stands."""
     cfg = _open(ctx)
     project = store.load_project(cfg)
     snap = take_snapshot(project, trace_module.collect(cfg), wip.collect(cfg))
-    until = strict.strict_until(cfg)
-    mode = f"{cfg.mode}, Strict until {until:%H:%M}" if until and cfg.mode != "strict" else cfg.mode
+    until = guard_module.strict_until(cfg)
+    if cfg.mode == "strict" or not until:
+        mode = cfg.mode
+    elif until == guard_module.FOREVER:
+        mode = f"{cfg.mode}, Strict until a person turns it off"
+    else:
+        mode = f"{cfg.mode}, Strict until {until:%H:%M}"
     click.echo(f"{cfg.product} · mode {mode} · Dev Charter {__version__}")
+    for line in notes.status_lines(cfg.root, session_start):
+        click.echo(line)
     for label, entries in (("Features", project.features), ("Promises", project.promises)):
         counts = snap.counts(entries)
         parts = " · ".join(f"{counts[name]} {name}" for name in ORDER if counts[name])
@@ -475,9 +532,9 @@ def status(ctx: click.Context, brief: bool) -> None:
     if waiting:
         click.echo(f"{LEDGER_FILE} holds a review not imported yet ({waiting.summary()}): import it when the person "
                    "asks (`dev-charter import`).")
-    notes = owner_review.open_notes(cfg)
-    if notes:
-        click.echo(f"{notes} review note{'s' if notes != 1 else ''} waiting in {config.CHARTER_DIR}/"
+    review_notes = owner_review.open_notes(cfg)
+    if review_notes:
+        click.echo(f"{review_notes} review note{'s' if review_notes != 1 else ''} waiting in {config.CHARTER_DIR}/"
                    f"{owner_review.NOTES_FILE}: go through them with the person who wrote them.")
     if hooks.missing_checks(cfg):
         click.echo("Commits in this clone are not checked yet: run `dev-charter sync`.")
@@ -526,7 +583,7 @@ def check_command(ctx: click.Context, staged: bool) -> None:
         ctx.exit(1)
 
 
-# --- Claude Code and CI ----------------------------------------------------------------------------------------------
+# --- The coding agents' hooks and CI ---------------------------------------------------------------------------------
 
 
 @main.command(name="strict")
@@ -534,25 +591,31 @@ def check_command(ctx: click.Context, staged: bool) -> None:
 @click.option("--hours", default=12.0, show_default=True, help="How long Strict mode stays on.")
 @click.pass_context
 def strict_command(ctx: click.Context, switch: str, hours: float) -> None:
-    """Turn Strict mode on or off in this clone only, for an unattended run: Claude Code may then change only the
+    """Turn Strict mode on or off in this clone only, for an unattended run: the coding agent may then change only the
     paths an open task card allows."""
     cfg = _open(ctx)
     if switch == "on":
-        until = strict.turn_on(cfg, hours)
-        click.echo(f"Strict mode is on in this clone until {until:%d %b %H:%M}. Claude Code can change only the "
-                   "Allowed paths of open task cards, and never a sign-off or a state.")
+        until = guard_module.turn_on(cfg, hours)
+        click.echo(f"Strict mode is on in this clone until {until:%d %b %H:%M}. The coding agent can change only the "
+                   "Allowed paths of open task cards, never a sign-off, a state or Dev Charter's settings, and "
+                   "cannot turn Strict mode off.")
     else:
-        strict.turn_off(cfg)
+        guard_module.turn_off(cfg)
         click.echo(f"Strict mode is off in this clone; the product's mode is {cfg.mode}.")
 
 
 @main.command(hidden=True)
 def guard() -> None:
-    """Claude Code's PreToolUse hook: refuses an edit Strict mode does not allow. Prints nothing to allow."""
+    """The agents' PreToolUse hook: refuses an edit or a shell command Strict mode does not allow, and notes each shell
+    command for `status`. Prints nothing to allow."""
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
-        reason = strict.decide(payload, Path.cwd())
-    except Exception as exc:  # a broken guard must never stop someone's work
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            reason = guard_module.unreadable(Path.cwd(), "its hook sent something that is not JSON")
+        else:
+            reason = guard_module.decide(payload, Path.cwd())
+    except Exception as exc:  # outside Strict mode, a broken guard must never stop someone's work
         click.echo(f"Dev Charter's guard could not run ({exc}); the edit was allowed.", err=True)
         return
     if reason:
@@ -562,7 +625,7 @@ def guard() -> None:
 
 @main.command(hidden=True, name="remind")
 def remind_command() -> None:
-    """Claude Code's PostToolUse hook: after an edit, say so when the code file does not say which feature it serves."""
+    """The agents' PostToolUse hook: after an edit, say so when a code file does not say which feature it serves."""
     try:
         payload = json.loads(sys.stdin.read() or "{}")
         message = remind.note(payload, Path.cwd())

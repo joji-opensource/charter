@@ -32,13 +32,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-      - name: The package and the plugin carry the same version
+      - name: The package and both plugin manifests carry the same version
         run: |
           uv run --no-project python - <<'EOF'
           import json, tomllib
           package = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
-          plugin = json.load(open("plugin/.claude-plugin/plugin.json"))["version"]
-          assert package == plugin, f"pyproject.toml says {package}, plugin.json says {plugin}"
+          for manifest in ("plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"):
+              plugin = json.load(open(manifest))["version"]
+              assert package == plugin, f"pyproject.toml says {package}, {manifest} says {plugin}"
           EOF
       - run: uv build
       - run: uvx twine check dist/*

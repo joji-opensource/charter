@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from . import git
@@ -11,6 +12,7 @@ from .config import Config, version_range
 from .errors import CharterError
 
 WORKFLOW = ".github/workflows/dev-charter.yml"
+INSTALL_RE = re.compile(r'uv tool install "dev-charter(?P<range>[^"]*)"')
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 SETUP_UV = "astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2"
 
@@ -77,3 +79,20 @@ def write(config: Config) -> tuple[Path, str]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path, "updated" if existed else "created"
+
+
+def upgrade_install(config: Config, versions: str) -> str | None:
+    """Point the workflow `dev-charter ci` wrote at these versions, changing only its install line; a workflow whose
+    install line was changed by hand is left alone, and the person is told."""
+    path = config.root / WORKFLOW
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    found = INSTALL_RE.findall(text)
+    if len(found) != 1:
+        return (f"{WORKFLOW}: its install line is not the one `dev-charter ci` wrote, so it was left as it is; make "
+                f"it install \"dev-charter{versions}\".")
+    if found[0] == versions:
+        return None
+    path.write_text(INSTALL_RE.sub(f'uv tool install "dev-charter{versions}"', text, count=1), encoding="utf-8")
+    return f"{WORKFLOW}: now installs Dev Charter {versions}."

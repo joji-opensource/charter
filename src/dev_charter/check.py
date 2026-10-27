@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__, git, hooks
-from .agents import AGENTS_FILE, EDITED, MISSING, NEWER, OLDER, block_state
+from . import __version__, agents, git, hooks
+from .config import Config
 from .store import LEGACY_HANDOFF_FILE, PLACEHOLDER_RE, Project
 from .trace import Trace
 
@@ -102,22 +103,7 @@ def run(project: Project, trace: Trace | None = None, changes: dict[Path, str] |
 
     if staged:
         return _ordered(findings)
-    state, written_by = block_state(config.root)
-    agents_file = config.root / AGENTS_FILE
-    if state == MISSING:
-        findings.append(Finding(WARNING, f"{AGENTS_FILE} has no Dev Charter section, so coding agents do not know the "
-                                "rules. Run `dev-charter sync`.", agents_file))
-    elif state == OLDER:
-        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was written by Dev Charter "
-                                f"{written_by} and its rules have changed since; {__version__} is installed. Run "
-                                "`dev-charter sync`.", agents_file))
-    elif state == EDITED:
-        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was edited by hand; `dev-charter "
-                                "sync` restores it. Put your own rules outside the section.", agents_file))
-    elif state == NEWER:
-        findings.append(Finding(WARNING, f"The Dev Charter section of {AGENTS_FILE} was written by Dev Charter "
-                                f"{written_by}, newer than yours ({__version__}). Upgrade with `uv tool upgrade "
-                                "dev-charter`.", agents_file))
+    findings += _instructions(project.config)
     legacy = config.charter_dir / LEGACY_HANDOFF_FILE
     if legacy.exists():
         findings.append(Finding(WARNING, f"charter/{LEGACY_HANDOFF_FILE} is no longer used: each task card keeps its "
@@ -131,6 +117,53 @@ def run(project: Project, trace: Trace | None = None, changes: dict[Path, str] |
 
 def _ordered(findings: list[Finding]) -> list[Finding]:
     return sorted(findings, key=lambda f: (f.level != PROBLEM, str(f.path or ""), f.line or 0))
+
+
+def _instructions(config: Config) -> list[Finding]:
+    """The rules in the root's AGENTS.md, and the pointer to them in each folder that needs one, as the coding agents
+    will find them."""
+    findings = []
+    places = [(config.root, None)] + [(folder, agents.pointer_body(config.product, to_root))
+                                      for folder, to_root in agents.pointer_folders(config)]
+    for folder, body in places:
+        shown = agents.AGENTS_FILE if folder == config.root else \
+            f"{Path(os.path.relpath(folder, config.root)).as_posix()}/{agents.AGENTS_FILE}"
+        what = "Dev Charter section" if body is None else f"pointer to {config.product}'s rules"
+        path = folder / agents.AGENTS_FILE
+        state, written_by = agents.block_state(folder, body=body)
+        upgrade = (f"was written by Dev Charter {written_by}, newer than yours ({__version__}). Upgrade with `uv tool "
+                   "upgrade dev-charter`.")
+        if body is None:
+            said = {
+                agents.MISSING: f"{shown} has no Dev Charter section, so coding agents do not know the rules. Run "
+                                "`dev-charter sync`.",
+                agents.OLDER: f"The Dev Charter section of {shown} was written by Dev Charter {written_by} and its "
+                              f"rules have changed since; {__version__} is installed. Run `dev-charter sync`.",
+                agents.EDITED: f"The Dev Charter section of {shown} was edited by hand; `dev-charter sync` restores "
+                               "it. Put your own rules outside the section.",
+                agents.NEWER: f"The Dev Charter section of {shown} {upgrade}",
+            }.get(state, "")
+        else:
+            said = {
+                agents.MISSING: f"{shown} has no {what}, so Codex started in that folder does not see them. Run "
+                                "`dev-charter sync`.",
+                agents.OLDER: f"The {what} in {shown} is out of date. Run `dev-charter sync`.",
+                agents.EDITED: f"The {what} in {shown} is out of date. Run `dev-charter sync`.",
+                agents.NEWER: f"The {what} in {shown} {upgrade}",
+            }.get(state, "")
+        if said:
+            findings.append(Finding(WARNING, said, path))
+        if (folder / agents.OVERRIDE_FILE).exists():
+            findings.append(Finding(WARNING, f"Codex reads {agents.OVERRIDE_FILE} instead of {agents.AGENTS_FILE} in "
+                                    f"this folder, so it does not see the {what}. Add it to that file, or remove the "
+                                    "file.", folder / agents.OVERRIDE_FILE))
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        match = agents.BLOCK_RE.search(text)
+        if match and len(text[:match.start()].encode("utf-8")) > agents.CODEX_LIMIT:
+            findings.append(Finding(WARNING, f"The {what} in {shown} starts after the first "
+                                    f"{agents.CODEX_LIMIT // 1024} KiB, which is all Codex reads: move it nearer the "
+                                    "top.", path))
+    return findings
 
 
 def _trace_findings(project: Project, trace: Trace, changes: dict[Path, str], staged: bool) -> list[Finding]:

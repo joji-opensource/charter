@@ -5,7 +5,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from openpyxl import load_workbook
 
-from dev_charter import __version__, guides
+from dev_charter import __version__, config, guides
 from dev_charter.cli import main
 
 from .conftest import DECISION_001, FEATURE_F014, Product
@@ -50,8 +50,7 @@ def test_commands_outside_a_product_say_how_to_start(tmp_path):
 
 
 def test_a_project_set_up_for_another_version_is_refused(product):
-    toml = product.root / "charter.toml"
-    toml.write_text(toml.read_text().replace('dev-charter = ">=0.1,<0.2"', 'dev-charter = ">=2.0,<3"'))
+    assert config.write_pin(product.root, ">=2.0,<3")
     result = product.run("status", ok=False)
     assert result.exit_code == 1 and "uses Dev Charter >=2.0,<3" in result.output
 

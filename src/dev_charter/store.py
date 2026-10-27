@@ -81,6 +81,20 @@ class Project:
 # --- parsing ---------------------------------------------------------------------------------------------------------
 
 
+class _DetailsLoader(yaml.SafeLoader):
+    """YAML's safe loader, refusing a detail written twice: YAML keeps the last, so one file would say two things."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(None, None, f"'{key}' is written twice",
+                                                        key_node.start_mark)
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def parse(path: Path, kind: Kind, text: str | None = None) -> Parsed:
     """Split a charter file into its details block, labelled story and sections.
 
@@ -96,7 +110,7 @@ def parse(path: Path, kind: Kind, text: str | None = None) -> Parsed:
     if end is None:
         raise FileProblem(path, 1, "The details at the top never end: add a line of three dashes (---) after them.")
     try:
-        meta = yaml.safe_load("\n".join(lines[1:end])) or {}
+        meta = yaml.load("\n".join(lines[1:end]), Loader=_DetailsLoader) or {}
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         problem = getattr(exc, "problem", None) or "it is not in the form 'name: value'"
@@ -384,6 +398,32 @@ def open_cards(config: Config) -> list[Card]:
         if card.state == "open":
             cards.append(card)
     return cards
+
+
+def card_file(config: Config, card_id: str) -> Path:
+    if not re.fullmatch(rf"{CARD.prefix}-\d{{3,}}", card_id):
+        raise CharterError(f"'{card_id}' is not a task card ID, such as {CARD.prefix}-005.")
+    found = sorted((config.charter_dir / CARD.folder).glob(f"{card_id}-*.md"))
+    if not found:
+        raise CharterError(f"There is no task card {card_id} in {CHARTER_DIR}/{CARD.folder}/.")
+    return found[0]
+
+
+def add_turn(path: Path, line: str) -> None:
+    """Add a line at the end of the card's Turns section, making the section on a card that has none. Every other
+    line of the card stays as it is."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, text in enumerate(lines) if text.strip() == "## Turns"), None)
+    if start is None:
+        while lines and not lines[-1].strip():
+            lines.pop()
+        lines += ["", "## Turns", "", line]
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        while end > start + 1 and not lines[end - 1].strip():
+            end -= 1
+        lines[end:end] = ["", line] if end == start + 1 else [line]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def read_ideas(path: Path) -> list[Idea]:

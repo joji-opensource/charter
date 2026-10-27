@@ -25,11 +25,13 @@ jobs:
             echo "The release tag ${GITHUB_REF_NAME} does not match the package version ${version}."
             exit 1
           fi
-          plugin="$(uv run --no-project python -c 'import json; print(json.load(open("plugin/.claude-plugin/plugin.json"))["version"])')"
-          if [ "${plugin}" != "${version}" ]; then
-            echo "plugin.json says ${plugin}, but the package is ${version}."
-            exit 1
-          fi
+          for manifest in plugin/.claude-plugin/plugin.json plugin/.codex-plugin/plugin.json; do
+            plugin="$(uv run --no-project python -c "import json; print(json.load(open('${manifest}'))['version'])")"
+            if [ "${plugin}" != "${version}" ]; then
+              echo "${manifest} says ${plugin}, but the package is ${version}."
+              exit 1
+            fi
+          done
       - run: uv build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

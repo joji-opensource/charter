@@ -6,7 +6,7 @@
    one already serves these checks, say so and ask instead of starting.
 3. **Make a task card**: `dev-charter card new "<title>" --serves F-014.a --serves F-014.c`. The plan goes in the
    card. One card at a time. In Strict mode, list the files the plan changes under **Allowed paths** (one per line,
-   such as `- shop/orders/**`): Claude Code cannot change anything else.
+   such as `- shop/orders/**`): the coding agent cannot change anything else.
 4. **Write a plan that names real things:**
    - the exact files to create, change or remove;
    - the contracts that change (function signatures, data shapes, commands, screens, messages) and what depends on

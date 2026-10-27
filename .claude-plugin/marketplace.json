@@ -8,7 +8,7 @@
     {
       "name": "dev-charter",
       "source": "./plugin",
-      "description": "Dev Charter's commands for Claude Code: set up a product, write features, follow the plan-review-probe-build loop, and Strict mode."
+      "description": "Dev Charter's commands and guardrails for Claude Code and Codex: set up a product, write features, follow the plan-review-probe-build loop, and Strict mode."
     }
   ]
 }

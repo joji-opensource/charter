@@ -10,7 +10,8 @@ from pathlib import Path
 from click.testing import CliRunner
 from openpyxl import load_workbook
 
-from dev_charter import ci, config, publish, strict
+from dev_charter import ci, config, publish
+from dev_charter import guard as guard_module
 from dev_charter.cli import main
 
 from .conftest import FEATURE_F014, Product
@@ -204,7 +205,7 @@ def test_strict_mode_keeps_claude_inside_its_card(git_product: Product):
     assert "Strict until" in shop.run("status", "--brief").output
     shop.run("strict", "off")
     assert guard(edit) is None
-    assert strict.strict_until(config.load(shop.root)) is None
+    assert guard_module.strict_until(config.load(shop.root)) is None
 
 
 def test_the_pull_request_summary_speaks_plainly_and_refuses_a_reused_id(git_product: Product):

@@ -1,6 +1,7 @@
 # Copyright 2026 Joji John
 # SPDX-License-Identifier: Apache-2.0
-"""Tags that explain themselves (0.1.1): every tag counts, Claude is reminded while building, words can be refreshed."""
+"""Tags that explain themselves (0.1.1): every tag counts, the coding agent is reminded while building, words can be
+refreshed."""
 
 import json
 
@@ -10,6 +11,7 @@ from openpyxl import load_workbook
 from dev_charter.cli import main
 
 from .conftest import FEATURE_F014, Product
+from .test_edits import codex
 
 FEATURE = FEATURE_F014.replace("decisions: [DEC-001]", "decisions: []")
 
@@ -84,3 +86,14 @@ def test_tags_refresh_brings_the_words_in_line_with_the_charter(product: Product
     assert lines[0] == "# serves: F-014 — Track my order"
     assert lines[2].startswith("# serves: F-014.c — Opening someone else's order") and len(lines[2]) <= 100
     assert lines[5] == "# serves: F-014, P-001"
+
+
+def test_codex_is_reminded_of_each_untagged_file_its_patch_writes(product: Product):
+    product.write("charter/features/F-014-track-my-order.md", FEATURE)
+    product.write("shop/orders.py", "x = 1\n")
+    product.write("shop/gifts.py", "y = 2\n")
+    patch = "*** Begin Patch\n*** Add File: shop/orders.py\n+x = 1\n*** Add File: shop/gifts.py\n+y = 2\n*** End Patch"
+    result = CliRunner().invoke(main, ["remind"], input=json.dumps(codex(patch, product.root, "PostToolUse")))
+    note = json.loads(result.output)["hookSpecificOutput"]["additionalContext"]
+    assert "shop/orders.py does not say which feature it serves" in note
+    assert "shop/gifts.py does not say which feature it serves" in note
