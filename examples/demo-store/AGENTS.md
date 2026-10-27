@@ -1,4 +1,4 @@
-<!-- dev-charter:start v0.1.3 -->
+<!-- dev-charter:start v0.2.0 -->
 ## Dev Charter: how work is done in this repository
 
 This product's features, promises and decisions live in `charter/`, written in plain English for the people who own
@@ -20,6 +20,8 @@ and My note columns; when they ask, bring those in with `dev-charter import`.
   code every feature relies on). Name each test after its check (`test_F014_b_text_sent`).
 - An idea that is not the task goes to `dev-charter park "<idea>"`, never into code.
 - Before saying work is done, run `dev-charter check` and fix what it reports.
+- When you hand a task card on to another agent or person, or stop working on it, record your turn:
+  `dev-charter card turn CARD-nnn --did "<what you did>"`.
 - Change the `state` or `priority` of a feature or promise, or write a sign-off, only when a person explicitly asks
   and names the items; then say exactly what you changed. Never commit with `--no-verify`.
 - Notes in `charter/review-notes.md` come from the product owner: go through them with that person, change nothing a

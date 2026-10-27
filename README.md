@@ -4,11 +4,10 @@
 
 Dev Charter keeps a plain-English record of every feature your product promises, links each one to the code that
 builds it and the tests that prove it, and turns that into a spreadsheet a founder, product manager or executive
-can read in five minutes. It is built for teams who write software with Claude Code, where code now arrives faster
-than anyone can read it.
+can read in five minutes. It is built for teams who write software with coding agents such as Claude Code and Codex,
+where code now arrives faster than anyone can read it.
 
-> **Status: 0.1, the first working release.** Built and tested with Claude Code. Feedback and issues are welcome on
-> GitHub.
+> **Status: 0.2.** Built and tested with Claude Code and Codex. Feedback and issues are welcome on GitHub.
 
 ---
 
@@ -63,6 +62,8 @@ AI coding agents let a small team build a large product quickly. The cost shows 
   in every session.
 - **Clean handoffs.** Each session ends with where it stopped and the exact next step, so the next session, or the
   next person, starts without guessing.
+- **Claude Code and Codex, one record.** Both follow the same rules and guardrails from your repository, and each
+  task card shows which agent did which stage, so one can plan and the other review.
 
 ### Before and after
 
@@ -118,26 +119,37 @@ Dev Charter has three layers. You can use the first two on their own.
    repositories, in any language, and reads test results in JUnit XML, which pytest and most test runners write
    (Jest and Go through a small add-on).
 3. **The Workflow: how the agent works.** Task cards that name the feature they serve, a plan → review → prove →
-   build → ship loop, one list for parked ideas, and a handoff on each card.
+   build → ship loop, one list for parked ideas, and a handoff and a record of turns on each card.
 
-**Code that explains itself.** Claude Code tags what it writes: `# serves: F-014 — Track my order` at the top of a
-file, and `# serves: F-014.c — someone else's order asks them to sign in` above the function that delivers that
-check. Every tag counts, the spreadsheet shows which file and line delivers each check, and with the plugin Claude is
-reminded the moment it changes a file that has no tag, so old code gets explained one change at a time.
+**Code that explains itself.** The coding agent tags what it writes: `# serves: F-014 — Track my order` at the top
+of a file, and `# serves: F-014.c — someone else's order asks them to sign in` above the function that delivers that
+check. Every tag counts, the spreadsheet shows which file and line delivers each check, and with the plugin the agent
+is reminded the moment it changes a file that has no tag, so old code gets explained one change at a time.
 
 `dev-charter report` combines all three into `LEDGER.xlsx` and a one-page `status.html`. They are rebuilt after every
 commit, on demand, and in CI, so they cannot drift from the truth. The only part anyone writes in is the
 spreadsheet's two yellow columns, for the product owner's decisions (below).
 
-### Built for Claude Code
+### Built for Claude Code and Codex
 
-Dev Charter's rules live in your repository, in `AGENTS.md`, which Claude Code reads every time it opens the project,
-so every teammate's sessions follow them. The full guide for each stage comes from the installed Dev Charter
-(`dev-charter guide plan`), so every project gets the same guides and upgrading Dev Charter upgrades them everywhere. The
-Dev Charter plugin adds commands such as `/dev-charter:feature` and `/dev-charter:plan`, and Strict mode.
+Dev Charter's rules live in your repository, in `AGENTS.md`, which Claude Code and Codex read every time they open the
+project, so every teammate's sessions follow them, whichever agent they use. The full guide for each stage comes from
+the installed Dev Charter (`dev-charter guide plan`), so every project gets the same guides and upgrading Dev Charter
+upgrades them everywhere. One plugin, for both agents, adds the stage skills (`/dev-charter:plan` in Claude Code,
+`$dev-charter:plan` in Codex) and the guardrails: Strict mode, and a reminder to tag code right after each edit.
 
-Other AI coding tools that read `AGENTS.md` are planned for a later release; this release is tested with Claude
-Code only.
+Codex runs a plugin's guardrails only once you trust them (type `/hooks` in Codex), and again after each update that
+changes them; until then, `dev-charter status` tells the agent they are not running. Start Codex in your product's
+root folder: in a product of several repositories, each child repository's `AGENTS.md` gets a short pointer to the
+root's rules, because Codex started inside one would not find them otherwise.
+
+**Taking turns.** Have one agent plan a task card and the other review it, or the other way round. Each records its
+turn on the card (`dev-charter card turn CARD-005 --did "review pass 2"`), so the card shows which agent did which
+stage, and the review guide has the second agent write its pass from the plan and the code before it reads the first
+one's. One agent works at a time; two agents at once in one folder are not coordinated.
+
+Other coding agents that read `AGENTS.md` follow the rules too, but are not tested, and the guardrails need Claude Code
+or Codex.
 
 ### The spreadsheet
 
@@ -160,11 +172,11 @@ The Features and Promises tabs have two yellow columns that belong to you, the p
   as *Retired*. **Not reviewed**: leave it as it is. Each row opens showing the current decision.
 - **My note**, anything to change, in your words: "reword check c", "merge with F-012".
 
-Save the file, then ask Claude Code to "import my review" (or run `dev-charter import`). Dev Charter applies only the
-decisions you changed, records who decided and when in `charter/review-log.md`, puts your notes in
-`charter/review-notes.md` for Claude Code to go through with you, and rebuilds the spreadsheet. Until you import, the
-rebuild after each commit leaves your copy alone. Using Google Sheets or Numbers? Save or download it as an Excel
-file and import that: `dev-charter import ~/Downloads/LEDGER.xlsx`.
+Save the file, then ask your coding agent to "import my review" (or run `dev-charter import`). Dev Charter applies
+only the decisions you changed, records who decided and when in `charter/review-log.md`, puts your notes in
+`charter/review-notes.md` for the agent to go through with you, and rebuilds the spreadsheet. Until you import, the
+rebuild after each commit leaves your copy alone. Using Google Sheets or Numbers? Save or download it as an Excel file
+and import that: `dev-charter import ~/Downloads/LEDGER.xlsx`.
 
 ## Choose how strict to be
 
@@ -172,10 +184,10 @@ file and import that: `dev-charter import ~/Downloads/LEDGER.xlsx`.
 |---|---|---|
 | **Light** | In CI, after work is merged | Prototypes, adding Dev Charter to an existing project gradually, teams without AI agents |
 | **Standard** | Before each commit | Everyday work where a person reviews and commits |
-| **Strict** | At every file change: Claude Code is blocked from writing outside its task | Long unattended agent runs, several agents at once, shared core code |
+| **Strict** | At every file change: the coding agent is kept to its task's files, away from sign-offs, states and Dev Charter's settings | Long unattended agent runs, shared core code |
 
 Switch modes with one line in `charter.toml` (then `dev-charter sync`), or turn Strict on in your own clone for an
-unattended run with `/dev-charter:strict on`.
+unattended run with the plugin's `strict` skill or `dev-charter strict on`. Only a person turns it off again.
 
 ## Working as a team
 
@@ -198,6 +210,10 @@ the same one, and Dev Charter takes care of the rest:
 **Joining a team:** after cloning, run `dev-charter sync` once. It installs the commit checks in your clone (git does
 not copy them), and CI checks every pull request either way.
 
+**Upgrading:** `uv tool upgrade dev-charter`, then `dev-charter sync --upgrade` in each project, which moves it to the
+new version and says what it changed; then update the plugin in each coding agent (in Codex, `codex plugin marketplace
+upgrade`, then trust the changed hooks in `/hooks`).
+
 ## Getting started
 
 **1. Install Dev Charter** (once per machine, in a terminal):
@@ -206,21 +222,29 @@ not copy them), and CI checks every pull request either way.
 uv tool install dev-charter
 ```
 
-**2. Add the Dev Charter plugin** (once per machine, inside Claude Code):
+**2. Add the Dev Charter plugin** (once per machine). Inside Claude Code:
 
 ```
 /plugin marketplace add joji-opensource/charter
 /plugin install dev-charter@dev-charter
 ```
 
-**3. Set up your project** (open Claude Code in your project folder):
+For Codex, in a terminal, then type `/hooks` in Codex and trust Dev Charter's hooks:
+
+```bash
+codex plugin marketplace add joji-opensource/charter
+codex plugin add dev-charter@dev-charter
+```
+
+**3. Set up your project** (open your agent in your product's root folder):
 
 ```
 /dev-charter:init
 ```
 
-Claude asks six questions (product name, areas, user roles, how strict to be, the branch work merges into, and who
-approves product changes) and sets everything up. Prefer the terminal? `dev-charter init` asks the same questions.
+(In Codex, `$dev-charter:init`.) The agent asks six questions (product name, areas, user roles, how strict to be, the
+branch work merges into, and who approves product changes) and sets everything up. Prefer the terminal?
+`dev-charter init` asks the same questions.
 
 **4. Work**
 
@@ -229,6 +253,8 @@ approves product changes) and sets everything up. Prefer the terminal? `dev-char
 /dev-charter:status   where are we?
 ```
 
+(In Codex, `$dev-charter:feature` and `$dev-charter:status`.)
+
 `LEDGER.xlsx` and `status.html` are rebuilt after every commit; `dev-charter report` rebuilds them any time. For the team's view on GitHub, run
 `dev-charter ci` once and commit the workflow it writes.
 
@@ -236,11 +262,11 @@ So that statuses include your tests, have your test runner write JUnit XML (with
 `pytest --junitxml=reports/junit.xml`) and tell Dev Charter where, with `results = ["reports/*.xml"]` in
 `charter.toml`. Name each test after the check it proves: `test_F014_b_text_sent`.
 
-`/dev-charter:init` adds only your product's own content to your project: a `charter.toml` settings file, a `charter/`
-folder with your features, promises, decisions, ideas and task cards, a short marked section in `AGENTS.md`, a few
-lines in `.gitignore` and `.gitattributes`, and git hooks that check each commit and refresh the spreadsheet. It never
-overwrites a hook you already have. Framework code never lives in your repository; upgrading Dev Charter upgrades every project that uses
-it.
+Setting up adds only your product's own content to your project: a `charter.toml` settings file, a `charter/` folder
+with your features, promises, decisions, ideas and task cards, a short marked section in `AGENTS.md` (and a pointer to
+it in each child repository's), a few lines in `.gitignore` and `.gitattributes`, and git hooks that check each commit
+and refresh the spreadsheet. It never overwrites a hook you already have. Framework code never lives in your
+repository; upgrading Dev Charter upgrades every project that uses it.
 
 ## What Dev Charter is not
 
@@ -248,6 +274,8 @@ it.
   product promises and whether each promise is kept.
 - **Not a test framework.** It reads the results of the tests you already run.
 - **Not tied to a language, stack or cloud.** Anything that can carry a comment and produce JUnit XML works.
+- **Not an agent runner.** It does not start, schedule or coordinate coding agents: you choose which agent works on a
+  card, one at a time, and the card records each turn.
 
 ## License
 

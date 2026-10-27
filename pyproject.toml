@@ -1,6 +1,6 @@
 [project]
 name = "dev-charter"
-version = "0.1.3"
+version = "0.2.0"
 description = "Know what your product does, which code delivers it, and what is proven, in one spreadsheet."
 readme = "README.md"
 license = "Apache-2.0"

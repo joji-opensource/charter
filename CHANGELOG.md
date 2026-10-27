@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.0 — 2026-10-27
+
+- **Codex, as well as Claude Code.** One plugin serves both agents: Codex installs it with `codex plugin marketplace
+  add joji-opensource/charter` and `codex plugin add dev-charter@dev-charter`, and calls its skills as
+  `$dev-charter:plan`. Codex runs the plugin's hooks once you trust them in `/hooks`, and again after each update that
+  changes them.
+- **The guardrails read both agents' edits.** Strict mode and the reminder to tag code understand Codex's patches,
+  file by file: a patch with one file outside the task card is refused whole. States and sign-offs are read as Dev
+  Charter reads them everywhere else, so a duplicated `state:` or an indented sign-off no longer slips past, and a
+  feature file with a detail written twice is reported by `check`.
+- **Strict mode keeps its own settings.** The agent cannot turn it off, nor change `charter.toml` or `.dev-charter/`;
+  when the guard cannot tell whether a change is allowed, it refuses.
+- **Guardrails that say when they are off.** The guard now also sees each shell command, and `status --brief` says when
+  it did not run for the agent's own command: the plugin is missing or older, or Codex has not been told to trust its
+  hooks. Two agents working in one folder never answer for each other. At session start, the plugin says when the
+  `dev-charter` command is missing or older than it.
+- **Products of several repositories.** Each child repository's `AGENTS.md` gets a short pointer to the root's rules,
+  because Codex started inside one would not find them otherwise. `check` reports a missing pointer, an
+  `AGENTS.override.md` (which Codex reads instead), and a section past the first 32 KiB Codex reads.
+- **Plain words when a write is refused.** A coding agent's sandbox lets it write only inside the folder it was started
+  in, and never in `.git`; Dev Charter now says so and what to do, never a traceback. `init` and `sync` carry on past git
+  hooks they cannot write, and say to run `dev-charter sync` from a terminal.
+- **Taking turns.** `dev-charter card turn CARD-005 --did "review pass 2"` adds a line to the card's new Turns section
+  (date · agent · what the turn did), naming the agent from its hook. The rules ask for it whenever an agent hands a
+  card on or stops, and the review guide describes a second review by another agent that does not start from the
+  first one's conclusions.
+- **Upgrading in one command.** `dev-charter sync --upgrade` moves a project set up for an older Dev Charter to this
+  one: the pin in `charter.toml` (changed last, so running it again finishes the job), the install line of the workflow
+  `dev-charter ci` wrote, the `AGENTS.md` section and the git hooks. A project that needs a newer Dev Charter is never
+  moved back. After upgrading Dev Charter, run it in each project, then update the plugin in each agent.
+
 ## 0.1.3 — 2026-10-25
 
 - **Decide in the spreadsheet.** The Features and Promises tabs of `LEDGER.xlsx` have two yellow columns for the
